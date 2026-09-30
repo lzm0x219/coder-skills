@@ -1,0 +1,9 @@
+[package]
+name = "blob-contract-design"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[lib]
+name = "blob_contract_design"
+path = "src/lib.rs"

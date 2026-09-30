@@ -1,0 +1,9 @@
+[package]
+name = "audit-sdk-design"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[lib]
+name = "audit_sdk_design"
+path = "src/lib.rs"

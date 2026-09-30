@@ -1,0 +1,10 @@
+syntax = "proto3";
+package example.profile.v1;
+
+message Profile {
+  string id = 1;
+  string display_name = 2;
+}
+
+message GetProfileRequest { string id = 1; }
+service ProfileService { rpc GetProfile(GetProfileRequest) returns (Profile); }

@@ -1,0 +1,7 @@
+.DS_Store
+.serena/
+__pycache__/
+*.py[cod]
+node_modules/
+target/
+.venv/

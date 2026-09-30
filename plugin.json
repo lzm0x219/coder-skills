@@ -1,0 +1,6 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "coder",
+  "version": "0.1.0",
+  "description": "面向软件工程设计与开发的可复用 Skill 集合。"
+}

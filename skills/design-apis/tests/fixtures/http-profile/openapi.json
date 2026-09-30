@@ -1,0 +1,36 @@
+{
+  "openapi": "3.1.1",
+  "info": { "title": "Profile update design fixture", "version": "1.0.0" },
+  "paths": {
+    "/profiles/{profileId}": {
+      "put": {
+        "operationId": "replaceProfile",
+        "description": "Replace the complete profile. If-Match compares the current strong ETag. A failed comparison does not write.",
+        "parameters": [
+          { "name": "profileId", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "If-Match", "in": "header", "required": true, "description": "Strong ETag returned by the last successful read.", "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ProfileInput" } } }
+        },
+        "responses": {
+          "204": { "description": "Replaced; no response body.", "headers": { "ETag": { "description": "New strong version tag", "schema": { "type": "string" } } } },
+          "400": { "description": "Invalid profile body" },
+          "403": { "description": "Caller cannot modify this profile" },
+          "412": { "description": "The If-Match precondition failed; no write was performed." }
+        },
+        "security": [{ "bearerAuth": [] }]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ProfileInput": {
+        "type": "object", "additionalProperties": false, "required": ["displayName"],
+        "properties": { "displayName": { "type": "string", "minLength": 1, "maxLength": 80 } }
+      }
+    },
+    "securitySchemes": { "bearerAuth": { "type": "http", "scheme": "bearer" } }
+  }
+}
