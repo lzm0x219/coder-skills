@@ -1,0 +1,10 @@
+const assert = require('node:assert/strict');
+const {createLedger} = require('./index.cjs');
+const log = [];
+const a = createLedger(2, (amount, delta) => log.push([amount, delta]));
+const b = createLedger(5, () => {});
+assert.equal(a.add(3), 5);
+assert.deepEqual(log, [[2,3]]);
+assert.equal(a.receipt(), 'Total: 5.00');
+assert.equal(b.receipt(), 'Total: 5.00');
+console.log('consumer PASS');

@@ -1,0 +1,14 @@
+{
+  "wrong-check-before": {
+    "exit": 1
+  },
+  "wrong-check-after": {
+    "exit": 1
+  },
+  "correct-check-before": {
+    "exit": 0
+  },
+  "correct-check-after": {
+    "exit": 0
+  }
+}

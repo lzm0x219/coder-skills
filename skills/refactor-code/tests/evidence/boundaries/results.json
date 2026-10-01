@@ -1,0 +1,21 @@
+{
+  "old-failure": {
+    "consumer_exit": 0,
+    "differential_exit": 0,
+    "unrelated.cjs_exit": 1,
+    "old_failure_unchanged": true
+  },
+  "user-edits": {
+    "consumer_exit": 0,
+    "differential_exit": 0
+  },
+  "readonly": {
+    "consumer_exit": 0,
+    "index_unchanged": true
+  },
+  "missing-private": {
+    "consumer_exit": 0,
+    "differential_exit": 0,
+    "runtime.cjs_exit": 1
+  }
+}

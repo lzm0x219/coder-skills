@@ -1,6 +1,6 @@
 # Skill 分类与命名
 
-`coder` 是插件名，`master` 是已实现的总入口。专业 Skill 按用户要完成的目标划分；语言、框架、工具和职位作为任务上下文。[覆盖设计](coverage-plan.md)列出 43 项工程任务的英文工作名，其中 2 项已实现、8 项为优先候选、33 项为覆盖项；它们不是 43 个待创建的 Skill。
+`coder` 是插件名，`master` 是已实现的总入口。专业 Skill 按用户要完成的目标划分；语言、框架、工具和职位作为任务上下文。[覆盖设计](coverage-plan.md)列出 43 项工程任务的英文工作名，其中 3 项已实现、8 项为优先候选、32 项为覆盖项；它们不是 43 个待创建的 Skill。
 
 ## 命名规则
 
@@ -12,7 +12,7 @@
 
 ## 已实现与优先评审的名称
 
-`design-apis` 和 `fix-bugs` 已创建 Skill 文件。`fix-bugs` 已完成[限定范围的独立评测](../skills/fix-bugs/tests/evaluations/fix-bugs-2026-09-30.md)，`design-apis` 仍待完整真实任务验证。其余名称便于优先评审，并不代表专业 Skill 已实现或边界已经通过真实任务验证。另有 33 项英文工作名仅承担覆盖追踪，不计划立即创建 Skill。
+`design-apis`、`fix-bugs` 和 `refactor-code` 已创建 Skill 文件。`fix-bugs` 已完成[限定范围的独立评测](../skills/fix-bugs/tests/evaluations/fix-bugs-2026-09-30.md)，`refactor-code` 按[行为评测协议](../skills/refactor-code/tests/rubric.md)验证；`design-apis` 仍待完整真实任务验证。其余名称便于优先评审，并不代表专业 Skill 已实现或边界已经通过真实任务验证。另有 32 项英文工作名仅承担覆盖追踪，不计划立即创建 Skill。
 
 | 名称 | 状态 | 用户目标与主要产物 |
 | --- | --- | --- |
@@ -26,5 +26,6 @@
 | `design-security` | 优先候选 | 设计信任边界与安全控制。 |
 | `fix-bugs` | 已实现 | 复现并修复缺陷，验证回归。 |
 | `review-changes` | 优先候选 | 针对固定差异审查实现与需求。 |
+| `refactor-code` | 已实现 | 调整结构与依赖，核验维护收益、兼容基线及消费者。 |
 
 新增实体 Skill 时，先用自然表达、直接点名、信息不足和不应触发的请求测试路由，再确定 `name` 与 `description`。没有独立工作方法的任务交给 `master` 的常规能力，或作为已实现 Skill 的按需参考。

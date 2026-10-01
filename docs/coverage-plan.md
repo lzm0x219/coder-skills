@@ -1,6 +1,6 @@
 # Coder 软件工程完整覆盖设计
 
-状态：**规划草案**。目前仓库实现 `coder:master`、`coder:design-apis` 和 `coder:fix-bugs`；`fix-bugs` 已完成[限定范围的独立评测](../skills/fix-bugs/tests/evaluations/fix-bugs-2026-09-30.md)，`design-apis` 仍待完整真实任务验证。下表列出 43 项覆盖任务的英文工作名与当前状态；它们不等于 43 个待创建目录。
+状态：**规划草案**。目前仓库实现 `coder:master`、`coder:design-apis`、`coder:fix-bugs` 和 `coder:refactor-code`；`fix-bugs` 已完成[限定范围的独立评测](../skills/fix-bugs/tests/evaluations/fix-bugs-2026-09-30.md)，`refactor-code` 按[行为评测协议](../skills/refactor-code/tests/rubric.md)区分验证层级；`design-apis` 仍待完整真实任务验证。下表列出 43 项覆盖任务的英文工作名与当前状态；它们不等于 43 个待创建目录。
 
 ## 覆盖目标
 
@@ -74,7 +74,7 @@
 | --- | --- | --- | --- |
 | `fix-bugs` | 已实现 | 复现问题、定位原因、修复并完成有意义的回归验证。 | 以当前缺陷为范围，不顺带展开无关重构。 |
 | `review-codebase` | 覆盖项 | 根据近期变更和实际维护摩擦检查代码结构，给出有文件依据且可排序的改善候选。 | 发现并评估机会；选定后的修改由重构任务承接。 |
-| `refactor-code` | 覆盖项 | 在可观察行为受控的前提下改善模块深度、依赖和可修改性。 | 改善内部结构；行为需求另行明确。 |
+| `refactor-code` | 已实现 | 在可观察行为受控的前提下改善模块深度、依赖和可修改性。 | 改善内部结构；行为需求另行明确。 |
 | `upgrade-deps` | 覆盖项 | 核对版本变化和兼容性，升级依赖并验证受影响路径。 | 管理依赖变更，不自动替换系统架构。 |
 | `migrate-systems` | 覆盖项 | 规划并执行模式、接口或技术迁移，核验兼容期、回退与旧路径退役。 | 负责一次迁移的终点，不覆盖所有日常发布。 |
 | `resolve-merge-conflicts` | 覆盖项 | 依据两侧意图解决冲突并完成合并或变基后的验证。 | 处理既有 Git 冲突，不替代代码审查。 |

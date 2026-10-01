@@ -1,0 +1,16 @@
+{
+  "readonly/index.cjs": "187ef0fe871e7a72dd02a1a2fd5631da2d2dd7fe82fbec948f69ad8663323b2a",
+  "readonly/consumer.cjs": "4727a5e44ad8f12f37e3de3f40d545e064d751ae3aa6af96615f1ddeae5b7610",
+  "readonly/request.txt": "e62c64fceb2d427fe7df153764c14764c291b27fcf6c88e8cdd63c5f0c558b8d",
+  "missing-private/runtime.cjs": "5d101b602b8d6aa1109b9a950b09bbb783639032e9853f68c2a7021beca6e899",
+  "missing-private/index.cjs": "ba24cc900afcfadf1b6bd4ba26a672c3242df702f3835a16128ad24847cfb690",
+  "missing-private/consumer.cjs": "2595249db1e92b218f895fcd1868d85e8ef3d5d550448dcf08a9e4bb044a9342",
+  "missing-private/request.txt": "4493c3d93ec625ba402371eb9164a947fe03381f683d9e1d08c47588404496b0",
+  "user-edits/index.cjs": "428435194dfaa2a09126197001fd9689b415a5f1e5b20b6ddf0f35a4a7077534",
+  "user-edits/consumer.cjs": "2faa8751928ced82be29e83cfb7b8c8b5f36571ef83ba6e050e81492024c7466",
+  "user-edits/request.txt": "183e648dabadde502bb6e6ccce5db09631eca87ec117d36b99413a0cdf4a7e5d",
+  "old-failure/unrelated.cjs": "e2561fb2a8f9159a623a1b270e16074f61bdabff1d6902a4660234c1dee5672e",
+  "old-failure/index.cjs": "ba24cc900afcfadf1b6bd4ba26a672c3242df702f3835a16128ad24847cfb690",
+  "old-failure/consumer.cjs": "2595249db1e92b218f895fcd1868d85e8ef3d5d550448dcf08a9e4bb044a9342",
+  "old-failure/request.txt": "193699f712b225eeeb6df149717a0e0178f63a9bf1bad396cd5a4cbc37f4e8ab"
+}
