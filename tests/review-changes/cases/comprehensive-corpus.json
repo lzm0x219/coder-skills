@@ -1,0 +1,69 @@
+{
+  "format": 1,
+  "cases": [
+    {
+      "id": "case-01",
+      "type": "service",
+      "contract": "成功确认的消息必须已经持久化。存储失败可抛出；broker 在进程失败后只重投未确认消息。ack 是此夹具提供的 broker 确认接口。",
+      "file": "consume.py",
+      "baseline": "def consume(message, db, broker):\n    db.insert(message)\n    broker.ack(message)\n",
+      "target": "def consume(message, db, broker):\n    broker.ack(message)\n    db.insert(message)\n"
+    },
+    {
+      "id": "case-02",
+      "type": "cli",
+      "contract": "python cli.py --json 的 stdout 是单个 JSON 对象；诊断输出 stderr；成功退出 0。",
+      "file": "cli.py",
+      "baseline": "import json, sys\nif '--json' in sys.argv:\n    print(json.dumps({'ok': True}))\n",
+      "target": "import json, sys\nprint('ready')\nif '--json' in sys.argv:\n    print(json.dumps({'ok': True}))\n"
+    },
+    {
+      "id": "case-03",
+      "type": "web",
+      "contract": "只允许已登录用户执行表单 POST。入口保护由运行时 router middleware 注入，此评测无法取得 middleware 或 session 配置；此 handler 中 request.user 为 middleware 注入的对象。",
+      "file": "handler.py",
+      "baseline": "def handle(request):\n    return {'name': request.user.name}\n",
+      "target": "def handle(request):\n    return {'name': request.user.name, 'updated': True}\n"
+    },
+    {
+      "id": "case-04",
+      "type": "embedded",
+      "contract": "板卡 X 的 ISR 必须在 500us 内结束。无编译器目标、clock 资料、datasheet 和板卡。emit 是板卡 GPIO SDK 符号。",
+      "file": "pulse.c",
+      "baseline": "extern void emit(void);\nvoid isr(void) { emit(); }\n",
+      "target": "extern void emit(void);\nvoid isr(void) { for (int i=0;i<50;i++) emit(); }\n"
+    },
+    {
+      "id": "case-05",
+      "type": "data",
+      "contract": "train=[0,2]，test=[100]。标准化 mean 只从 train 拟合；transform(test) 可读取 test 值但不能把它用于拟合。函数返回 test 标准化结果。",
+      "file": "prep.py",
+      "baseline": "def transform(train, test):\n    mean = sum(train) / len(train)\n    return [v - mean for v in test]\n",
+      "target": "def transform(train, test):\n    values = train + test\n    mean = sum(values) / len(values)\n    return [v - mean for v in test]\n"
+    },
+    {
+      "id": "case-06",
+      "type": "app",
+      "contract": "Draft 使用 durable 字典模拟设备持久存储；重建 Draft 后必须恢复已保存文本。该字典模型不证明 OS 生命周期。",
+      "file": "draft.py",
+      "baseline": "class Draft:\n    def __init__(self, durable):\n        self.durable = durable\n        self.text = durable.get('text', '')\n    def save(self, text):\n        self.text = text\n        self.durable['text'] = text\n",
+      "target": "class Draft:\n    def __init__(self, durable):\n        self.durable = durable\n        self.text = ''\n    def save(self, text):\n        self.text = text\n        self.durable['text'] = text\n"
+    },
+    {
+      "id": "case-07",
+      "type": "document",
+      "contract": "cli.py 是当前实现：argparse.ArgumentParser().add_argument('--json',action='store_true')；parse_args() 不接受其他参数。文档必须只写当前有效命令。",
+      "file": "README.md",
+      "baseline": "机器输出：`python cli.py --json`\n",
+      "target": "机器输出：`python cli.py --machine`\n"
+    },
+    {
+      "id": "case-08",
+      "type": "tool",
+      "contract": "pairs 接收任意有限 list，但只对前8项生成有序笛卡尔积，返回内容顺序不受项目要求限制。真实入口只把 pairs 结果交给计数函数 len。",
+      "file": "pairs.py",
+      "baseline": "def pairs(values):\n    bounded = values[:8]\n    return [(a,b) for a in bounded for b in bounded]\n",
+      "target": "def pairs(values):\n    bounded = values[:8]\n    output = []\n    for a in bounded:\n        for b in bounded:\n            output.append((a,b))\n    return output\n"
+    }
+  ]
+}

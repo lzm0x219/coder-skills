@@ -1,0 +1,268 @@
+{
+  "schema_version": 1,
+  "scope": "既定软件类型与通用风险分类；未列出的变化仍须 F1，不代表穷尽所有未来缺陷。",
+  "profiles": [
+    "web",
+    "services",
+    "tools",
+    "apps",
+    "data-ai",
+    "embedded",
+    "noncode"
+  ],
+  "groups": [
+    {
+      "path": "references/checks/async.md",
+      "rules": [
+        "A1",
+        "A2",
+        "A3",
+        "A4",
+        "A5"
+      ]
+    },
+    {
+      "path": "references/checks/behavior.md",
+      "rules": [
+        "B1",
+        "B2",
+        "B3",
+        "B4",
+        "B5"
+      ]
+    },
+    {
+      "path": "references/checks/contracts.md",
+      "rules": [
+        "C1",
+        "C2",
+        "C3",
+        "C4",
+        "C5"
+      ]
+    },
+    {
+      "path": "references/checks/delivery.md",
+      "rules": [
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "L5"
+      ]
+    },
+    {
+      "path": "references/checks/observability.md",
+      "rules": [
+        "O1",
+        "O2",
+        "O3"
+      ]
+    },
+    {
+      "path": "references/checks/reliability.md",
+      "rules": [
+        "Q1",
+        "Q2",
+        "Q3",
+        "Q4",
+        "Q5"
+      ]
+    },
+    {
+      "path": "references/checks/resources.md",
+      "rules": [
+        "R1",
+        "R2",
+        "R3",
+        "R4"
+      ]
+    },
+    {
+      "path": "references/checks/semantics.md",
+      "rules": [
+        "V1",
+        "V2",
+        "V3",
+        "V4"
+      ]
+    },
+    {
+      "path": "references/checks/state.md",
+      "rules": [
+        "D1",
+        "D2",
+        "D3",
+        "D4",
+        "D5",
+        "D6"
+      ]
+    },
+    {
+      "path": "references/checks/structure.md",
+      "rules": [
+        "M1",
+        "M2",
+        "M3",
+        "M4",
+        "M5"
+      ]
+    },
+    {
+      "path": "references/checks/supply-chain.md",
+      "rules": [
+        "S1",
+        "S2",
+        "S3",
+        "S4"
+      ]
+    },
+    {
+      "path": "references/checks/trust.md",
+      "rules": [
+        "T1",
+        "T2",
+        "T3",
+        "T4",
+        "T5",
+        "T6",
+        "T7",
+        "T8"
+      ]
+    },
+    {
+      "path": "references/checks/ui.md",
+      "rules": [
+        "U1",
+        "U2",
+        "U3",
+        "U4",
+        "U5",
+        "U6",
+        "U7",
+        "U8"
+      ]
+    },
+    {
+      "path": "references/profiles/apps.md",
+      "rules": [
+        "P1",
+        "P2",
+        "P3",
+        "P4"
+      ]
+    },
+    {
+      "path": "references/profiles/data-ai.md",
+      "rules": [
+        "E1",
+        "E2",
+        "E3",
+        "E4",
+        "E5"
+      ]
+    },
+    {
+      "path": "references/profiles/embedded.md",
+      "rules": [
+        "H1",
+        "H2",
+        "H3",
+        "H4"
+      ]
+    },
+    {
+      "path": "references/profiles/noncode.md",
+      "rules": [
+        "N1",
+        "N2",
+        "N3"
+      ]
+    },
+    {
+      "path": "references/profiles/services.md",
+      "rules": [
+        "I1",
+        "I2",
+        "I3"
+      ]
+    },
+    {
+      "path": "references/profiles/tools.md",
+      "rules": [
+        "K1",
+        "K2",
+        "K3"
+      ]
+    },
+    {
+      "path": "references/profiles/web.md",
+      "rules": [
+        "W1",
+        "W2",
+        "W3"
+      ]
+    },
+    {
+      "path": "references/routing.md",
+      "rules": [
+        "F1",
+        "F2",
+        "F3"
+      ]
+    }
+  ],
+  "evidence_levels": {
+    "structural": "checks/verify_coverage.py 仅检查清单/形状/指针",
+    "witness": "实际受控路径，非智能体审查效果",
+    "forward": "独立实际使用 Skill，保留缺口",
+    "absent": "未有逐条运行见证，不能称通过"
+  },
+  "witnesses": [
+    {
+      "rules": [
+        "B1",
+        "D1",
+        "T2"
+      ],
+      "source": "checks/verify_review_cases.py",
+      "limit": "当前案例中行为和Git见证；不等于全部相关规则"
+    },
+    {
+      "rules": [
+        "Q2",
+        "D2",
+        "K1",
+        "E3",
+        "P1",
+        "N1",
+        "R1"
+      ],
+      "source": "checks/verify_extended_cases.py",
+      "limit": "SQLite真实回滚+broker模型、真实CLI、拟合/持久字典模型、当前argparse命令、硬上限计数"
+    },
+    {
+      "rules": [
+        "Q1",
+        "V1",
+        "V2",
+        "V3"
+      ],
+      "source": "checks/verify_extended_cases.py",
+      "limit": "真实Python API及确定性输入；未推定业务政策或生产容量"
+    },
+    {
+      "rules": [
+        "B1",
+        "B2",
+        "E1",
+        "N1",
+        "K1",
+        "P1"
+      ],
+      "source": "checks/verify_type_replay.py",
+      "limit": "持久源快照复放：WSGI/query、CLI guard、CSV边界、文档消费者；Swift/C仅host模型，plist仅格式；不证明整条规则或真实设备"
+    }
+  ],
+  "unwitnessed_policy": "未被上述见证直接涉及的规则仍无逐条运行见证；方法文档不证明代理使用效果。"
+}

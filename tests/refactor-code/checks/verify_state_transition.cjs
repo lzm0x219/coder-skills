@@ -1,0 +1,22 @@
+// Evaluator only: validate the refreshed workspace contract after current ledger.
+const assert = require('node:assert/strict');
+const path = require('node:path');
+const root = path.resolve(process.argv[2]);
+const {createLedger} = require(path.join(root,'index.cjs'));
+const events = [];
+const a = createLedger(2, (before, delta) => events.push([before, delta]));
+const b = createLedger(7, () => {});
+assert.equal(a.add(3), 5);
+assert.deepEqual(events, [[2,3]]);
+assert.equal(a.receipt(), 'Total: 5.00');
+assert.equal(b.receipt(), 'Total: 7.00');
+assert.throws(() => a.add(NaN), {name:'RangeError',message:'delta'});
+assert.deepEqual(events, [[2,3]]);
+let throws = true;
+const c = createLedger(9, () => {if(throws) throw new Error('writer');});
+assert.throws(() => c.add(2), /writer/);
+assert.equal(c.receipt(), 'Total: 9.00');
+throws = false;
+assert.equal(c.add(2), 11);
+assert.equal(c.receipt(), 'Total: 11.00');
+console.log('PASS current ledger contract, instance isolation, validation and callback ordering');

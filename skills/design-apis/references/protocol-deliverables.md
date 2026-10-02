@@ -1,23 +1,22 @@
-# 协议接口的设计期交付
+# API 契约的设计期交付
 
-适用：为具体 HTTP、GraphQL、RPC、事件或 Webhook 接口设计、演进或评审调用方契约。仅讨论概念时按问题范围输出模型或评审结论；下列文件要求针对可实施的具体提案。优先沿用项目已有的契约源和工具链，不为满足清单另造一套并行规范。
+适用：具体协议、实时流、自动化或公开查询接口的契约提案；库/SDK/框架使用[声明交付](library-sdk/deliverables.md)。按[共同交付与核验](common.md#delivery-evidence)固定主契约、消费路径和证据，下表补充各类型的载体与消费者。
 
 ## 主契约与消费证据
 
-1. 指出**主契约载体及版本**：HTTP 用项目采用的 OpenAPI 或等价定义；GraphQL 用 SDL 或等价 schema；gRPC/Proto 用 `.proto`；事件用消息 schema 及所采用的 CloudEvents/AsyncAPI 定义；Webhook 用服务商正式契约或自有回调定义。文档应指向实际文件和入口。第三方 Webhook 的本地接收决策不能冒充服务商契约。
-2. 给出至少一条**正常消费路径**和一条**关键拒绝、失败或兼容路径**。样例写具体输入、可见结果、错误标识和调用方下一步；涉及超时后结果未知、重投、乱序或部分成功时，展示消费方如何恢复。已有接口演进还要让旧消费者或旧消息参与验证。
-3. 类型与 schema 表达不了的权限、副作用、确认点、顺序、幂等、保留期和错误优先级写入契约说明。命中参考规则的 `MUST` 须能指向具体契约值或验证证据；无法核实的外部行为明确列为未决。
+| 接口形态 | 主契约与版本 | 消费证据 |
+| --- | --- | --- |
+| HTTP / GraphQL | 项目 OpenAPI/等价定义；SDL 与所用 transport profile | 完整 URL 或 named operation、变量、响应及消费者处理。 |
+| RPC | 项目 IDL（Proto、Thrift、WSDL 等）或 method/envelope schema；transport/profile | 对应工具生成/解析的消费者与 error/end-of-stream；JSON-RPC notification 无响应，不虚构 ACK。 |
+| 事件 / Webhook | 消息 schema、所采用的 CloudEvents/AsyncAPI/broker binding；提供方正式 profile 或自有回调 | 发布/订阅/接收/ACK 的两侧合同和去重恢复；管理接口与数据投递分别验证。 |
+| 持续连接 / 流 | 握手与 framing/profile、应用 envelope、状态机、结束/恢复信号 | consumer 解析、慢消费、断线/取消/权限失效；transport frame 不等于业务确认。 |
+| CLI / 进程 | argv/options/config、stdin/stdout framing、exit/error 与 signal 合同 | 实际子进程消费者和 pipeline；stdout/stderr/exit 分别断言。 |
+| SQL / 查询 / DSL | 固定方言与版本、DDL/公开视图或 query templates、绑定与结果类型、事务/session 合同 | 真实引擎或所采用 DSL parser 的参数与结果消费者，NULL/顺序/失败/旧查询检查。 |
+
+类型/schema 之外的语义按 C05 写入契约说明，用[维度与遗漏检查](coverage.md)及命中分支补齐边界。目标涉及 OS、设备、GPU、宿主 ABI 或专有 profile 时，按其官方版本补充载体与消费检查。
 
 ## 核验与状态
 
-- **格式/静态核验：** 对主契约运行与其版本匹配的解析器、schema 校验器或编译器，并验证样例。报告实际工具、版本、命令、通过及拒绝的用例。解析成功只证明被该工具覆盖的格式或类型，不证明 HTTP 状态、GraphQL 解析器、RPC 执行、broker 投递或 Webhook 来源。
-- **语义走查：** 将正常、关键失败和既有消费者的结果逐项对照契约；若规则依赖真实提供方、服务端、broker 或部署配置，标注验证对象与缺失证据。静态检查无法证明的行为不得写为已通过。
-- **运行验证：** 用户要求实现或已有可运行服务时，检查真实请求、响应、副作用和新旧调用方；设计任务可记为“未验证”，不因此把静态提案否定为草案。
+按[共同核验](common.md#delivery-evidence)执行与载体版本匹配的解析、编译及语义检查。格式通过仅证明对应格式或类型；HTTP 行为、GraphQL 执行、RPC 调用、broker 投递与 Webhook 来源分别需要对应消费或运行证据。
 
-| 设计状态 | 判据 |
-| --- | --- |
-| 草案 / 待验证 | 主契约或关键消费路径缺失，格式检查失败/不可运行，或命中的关键规则无具体决策。列出阻断项。 |
-| 可供设计评审 | 主契约与正反消费样例一致；能执行的检查已执行，语义与未知事实分别标注；评审者可逐项接受或修改。 |
-| 设计通过 | 阻断性未知已解决，命中的 `MUST` 均有契约依据，兼容与恢复取舍已记录，且项目设计决策者已接受。它不表示服务实现或部署已验证。 |
-
-只报告实际达到的状态。示例回归见 [协议测试样例](../tests/README.md)；它们证明固定设计案例可被工具复查，不代表对任意新 API 的自动合规判定。
+按[统一交付判据](common.md#delivery-status)报告合同、验证层级与接受状态。示例回归见[协议测试样例](../../../tests/design-apis/README.md)。

@@ -1,6 +1,0 @@
-{
-  "specversion": "1.0",
-  "source": "/orders",
-  "type": "com.example.order.created.v1",
-  "data": { "orderId": "42", "revision": 1 }
-}

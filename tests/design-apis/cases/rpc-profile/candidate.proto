@@ -1,0 +1,22 @@
+syntax = "proto3";
+package example.profile.v1;
+
+message Profile {
+  string id = 1;
+  reserved 2;
+  reserved "legacy_name";
+  optional string display_name = 3;
+  optional int32 reputation = 4;
+}
+
+message GetProfileRequest { string id = 1; }
+message WatchProfilesRequest { string id = 1; }
+message ProfileUpdate {
+  uint64 sequence = 1;
+  Profile profile = 2;
+}
+
+service ProfileService {
+  rpc GetProfile(GetProfileRequest) returns (Profile);
+  rpc WatchProfiles(WatchProfilesRequest) returns (stream ProfileUpdate);
+}

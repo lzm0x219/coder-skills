@@ -1,0 +1,77 @@
+{
+  "openapi": "3.1.1",
+  "info": { "title": "Export operations and profile pagination fixture", "version": "1.0.0" },
+  "paths": {
+    "/exports": {
+      "post": {
+        "operationId": "createExport",
+        "description": "The same Idempotency-Key and same canonical request returns the original operation. Reusing the key with a different request fingerprint returns 409 and does not create a second operation. Key retention is 24 hours (candidate service policy).",
+        "parameters": [
+          { "$ref": "#/components/parameters/IdempotencyKey" }
+        ],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ExportRequest" } } } },
+        "responses": {
+          "202": {
+            "description": "Accepted; observe this operation at the returned Location.",
+            "headers": {
+              "Location": { "required": true, "schema": { "type": "string", "format": "uri-reference" } },
+              "Retry-After": { "description": "Suggested polling delay in seconds.", "schema": { "type": "integer", "minimum": 1 } }
+            },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Operation" } } }
+          },
+          "400": { "$ref": "#/components/responses/Problem400" },
+          "409": { "description": "Key reused with a different request fingerprint.", "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } } } }
+        }
+      }
+    },
+    "/exports/{operationId}": {
+      "get": {
+        "operationId": "getExportOperation",
+        "parameters": [{ "name": "operationId", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": {
+          "200": { "description": "Current state; nonterminal states may repeat.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Operation" } } } },
+          "404": { "$ref": "#/components/responses/Problem404" }
+        }
+      }
+    },
+    "/profiles": {
+      "get": {
+        "operationId": "listProfiles",
+        "parameters": [
+          { "name": "page_size", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 50 } },
+          { "name": "page_token", "in": "query", "description": "Opaque continuation token bound to this filter and ordering.", "schema": { "type": "string" } },
+          { "name": "status", "in": "query", "description": "Filter is part of continuation-token scope.", "schema": { "type": "string", "enum": ["active", "archived"] } }
+        ],
+        "responses": {
+          "200": { "description": "A page. An empty profiles array may still include next_page_token; only an absent/empty token ends traversal.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ProfilePage" } } } },
+          "400": { "$ref": "#/components/responses/Problem400" }
+        }
+      }
+    }
+  },
+  "components": {
+    "parameters": {
+      "IdempotencyKey": { "name": "Idempotency-Key", "in": "header", "required": true, "description": "Opaque key scoped to caller and createExport; retain for 24 hours.", "schema": { "type": "string", "minLength": 1, "maxLength": 128 } }
+    },
+    "responses": {
+      "Problem400": { "description": "Invalid request.", "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } } } },
+      "Problem404": { "description": "Operation not found or not visible to caller.", "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } } } }
+    },
+    "schemas": {
+      "ExportRequest": { "type": "object", "additionalProperties": false, "required": ["profileId", "format"], "properties": { "profileId": { "type": "string", "minLength": 1 }, "format": { "type": "string", "enum": ["json", "csv"] } } },
+      "Operation": {
+        "type": "object", "required": ["id", "state"], "properties": {
+          "id": { "type": "string" },
+          "state": { "type": "string", "enum": ["accepted", "running", "succeeded", "failed", "cancelled"] },
+          "result": { "$ref": "#/components/schemas/ExportResult" },
+          "error": { "$ref": "#/components/schemas/Problem" }
+        },
+        "allOf": [{ "if": { "properties": { "state": { "const": "succeeded" } }, "required": ["state"] }, "then": { "required": ["result"] } }, { "if": { "properties": { "state": { "const": "failed" } }, "required": ["state"] }, "then": { "required": ["error"] } }]
+      },
+      "ExportResult": { "type": "object", "required": ["downloadUrl", "expiresAt"], "properties": { "downloadUrl": { "type": "string", "format": "uri" }, "expiresAt": { "type": "string", "format": "date-time" } } },
+      "ProfilePage": { "type": "object", "required": ["profiles"], "properties": { "profiles": { "type": "array", "items": { "$ref": "#/components/schemas/Profile" } }, "next_page_token": { "type": "string" } } },
+      "Profile": { "type": "object", "required": ["id", "status"], "properties": { "id": { "type": "string" }, "status": { "type": "string", "enum": ["active", "archived"] } } },
+      "Problem": { "type": "object", "required": ["type", "title", "status"], "properties": { "type": { "type": "string", "format": "uri-reference" }, "title": { "type": "string" }, "status": { "type": "integer", "minimum": 400, "maximum": 599 }, "detail": { "type": "string" }, "instance": { "type": "string", "format": "uri-reference" } }, "additionalProperties": true }
+    }
+  }
+}

@@ -1,0 +1,21 @@
+type Query {
+  order(id: ID!): Order
+}
+
+type Mutation {
+  updateOrder(id: ID!, input: UpdateOrderInput!): Order
+}
+
+input UpdateOrderInput {
+  note: String = "default note"
+  priority: Int! = 1
+  displayLabel: String
+}
+
+type Order {
+  id: ID!
+  note: String
+  priority: Int!
+  displayLabel: String
+  legacyNote: String @deprecated(reason: "Use note; remove after known clients migrate.")
+}

@@ -1,10 +1,30 @@
 # 程序接口原则的语言映射
 
-适用：把跨语言规则落实到目标语言、运行时与发布工具链。这里的语言机制只是示例；版本敏感语法与 ABI 以目标版本的一手资料核验。
+目标语言已定时，从下表读取相应分支；比较不同语言表达时再看后面的机制表。语法、ABI 和工具行为均按项目实际版本核验，语言示例不成为跨语言要求。
 
-## 同一原则的语言映射
+## 选定目标后的具体映射
 
-下表仅用于选取宿主语言的惯用机制；不表示某一种机制跨语言更优。每项仍须查项目所用语言版本与官方文档。
+目标语言已定且正在设计签名、错误、扩展或兼容边界时，只读该语言的专属页；涉及 FFI 时再读 [原生互操作](native-interop.md)，包解析再读 [包与平台产物](packaging.md)。将目标语言惯例转成候选签名和消费者检查。
+
+| 目标语言 | 条件读取 |
+| --- | --- |
+| Rust | [Rust APIs](languages/rust.md)：可见性、错误/缺失、trait 与枚举演化、feature、借用/所有权。 |
+| Swift | [Swift APIs](languages/swift.md)：调用点标签、初始化、错误与异步、resilience。 |
+| Go | [Go APIs](languages/go.md)：包边界、zero value、接口消费、errors/context 与兼容承诺。 |
+| Java / Kotlin | [JVM APIs](languages/jvm.md)：Java binary compatibility、Kotlin 默认参数/属性与多平台公开 API。 |
+| .NET | [.NET APIs](languages/dotnet.md)：成员可见性、interface/virtual 成员、TAP 与框架兼容。 |
+| TypeScript / JavaScript | [TypeScript / JavaScript APIs](languages/typescript.md)：声明/运行时同构、module resolution、类型公开和 async iterator。 |
+| Python | [Python APIs](languages/python.md)：公开模块、异常、Protocol/ABC、asyncio cancellation/task lifetime。 |
+
+## 具体提案的可检查载体
+
+主契约与静态检查按[设计期交付](deliverables.md)。采用项目工具链：TS 导出类型/`declare` 或 JS JSDoc，Python `.pyi`/Protocol，Go 导出类型/接口，Rust `pub` 类型/trait，JVM/.NET 公开 interface/数据类型，Swift protocol 或 C++ 头文件/模块接口；各自配独立消费者。需要函数体的 Go/Rust 入口采用隔离的编译占位，或保持未验证，不能删掉需要的构造器。
+
+具体检查命令和条件在语言子页；Swift/C++ 使用项目 typecheck/编译命令。编译、类型检查与真实包导出、ABI、链接及运行分别报告；没有工具链标未验证，不另造构建项目。
+
+## 比较语言表达时
+
+以下机制帮助比较候选形态，不表示某一种机制跨语言更优；选定后以该语言分支和实际版本为准。
 
 | 普遍目标 | 可能的语言级表达 |
 | --- | --- |
@@ -15,18 +35,3 @@
 | 公共/内部边界 | Rust `pub`、Go 大写导出、Python `__all__`/下划线、Kotlin explicit API、TypeScript 包 `exports`/声明文件；所有语言还需文档稳定性标签。 |
 | 扩展点 | Java/C# 接口或抽象类、Rust trait、Swift protocol、Kotlin interface、Go 小接口、Python protocol/ABC、TypeScript interface/structural type；C++ 抽象基类或模板约束。 |
 | 异步与取消 | 宿主语言 Future/Promise、协程或回调；取消令牌、上下文或任务取消机制必须映射到一致的可观察语义。 |
-
-## 具体提案的可检查载体
-
-下表给出[设计期交付](deliverables.md)的常见落点，不要求项目改用表中的构建工具。优先使用项目已经采用的包结构、语言版本与检查命令；尚无工具链时标记静态检查未验证。声明只需足以描述公开表面，消费者只需编译/静态检查，不需要伪造运行时实现。
-
-| 目标语言 | 候选公开契约与消费者 | 设计期检查示例 |
-| --- | --- | --- |
-| TypeScript / JavaScript | 导出类型与 `declare` 签名或 JSDoc 类型，加独立消费者文件；包 `exports` 已确定时验证该导入。 | 使用项目配置运行 `tsc --noEmit`；仅检查相对候选文件时，不声称包导出已验证。 |
-| Python | `.pyi`、Protocol 或带类型注解的公开模块，加消费者文件。 | 使用项目选定的 mypy/pyright 配置检查；运行时导入与动态行为另验。 |
-| Go | 导出类型/接口与消费者，维持真实包路径；若拟议构造器或函数需要函数体，按[设计期交付](deliverables.md)使用隔离的编译占位或标为未验证。 | `go test` 或项目构建命令编译候选包与消费者；编译占位不证明运行行为。 |
-| Rust | `pub` 类型/trait 与消费者模块，遵守 crate 的 feature 和可见性边界；需要实现体的入口同样隔离占位或标为未验证。 | `cargo check` 对应 feature 组合；未构建的 feature 标为未验证。 |
-| Java / Kotlin / C# | 公开 interface、数据类型和消费者编译单元。 | 使用项目构建任务编译目标模块与消费者；二进制兼容仍须另验。 |
-| Swift / C++ | 公开 protocol、头文件或模块接口，加调用侧编译单元。 | 使用项目的 typecheck/编译命令检查目标平台；ABI 与链接结果另验。 |
-
-语言机制的细节需核验相应一手资料：[Rust](https://rust-lang.github.io/api-guidelines/checklist.html)、[Swift](https://www.swift.org/documentation/api-design-guidelines/)、[Kotlin](https://kotlinlang.org/docs/api-guidelines-introduction.html)、[.NET](https://learn.microsoft.com/en-us/dotnet/standard/design-guidelines/)、[C++](https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines)、[Go](https://go.dev/doc/effective_go)、[Python](https://peps.python.org/pep-0008/#public-and-internal-interfaces)、[TypeScript](https://www.typescriptlang.org/docs/handbook/declaration-files/library-structures.html)。

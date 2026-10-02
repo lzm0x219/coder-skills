@@ -1,0 +1,48 @@
+{
+  "openapi": "3.1.1",
+  "info": { "title": "Profile update design fixture", "version": "1.0.0" },
+  "paths": {
+    "/profiles/{profileId}": {
+      "put": {
+        "operationId": "replaceProfile",
+        "description": "Replace the complete profile. If-Match compares the current strong ETag. A failed comparison does not write.",
+        "parameters": [
+          { "name": "profileId", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "If-Match", "in": "header", "required": true, "description": "Strong ETag returned by the last successful read.", "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ProfileInput" } } }
+        },
+        "responses": {
+          "204": { "description": "Replaced; no response body.", "headers": { "ETag": { "description": "New strong version tag", "schema": { "type": "string" } } } },
+          "401": { "description": "Missing or invalid credentials.", "headers": { "WWW-Authenticate": { "description": "Authentication challenge applicable to this resource.", "schema": { "type": "string" } } }, "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } } } },
+          "400": { "description": "Invalid profile body or required If-Match omitted by this API contract.", "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } } } },
+          "403": { "description": "Caller is authenticated but cannot modify this profile.", "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } } } },
+          "412": { "description": "The If-Match precondition failed; no write was performed.", "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" } } } }
+        },
+        "security": [{ "bearerAuth": [] }]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Problem": {
+        "type": "object", "required": ["type", "title", "status"],
+        "properties": {
+          "type": { "type": "string", "format": "uri-reference" },
+          "title": { "type": "string" },
+          "status": { "type": "integer", "minimum": 400, "maximum": 599 },
+          "detail": { "type": "string" },
+          "instance": { "type": "string", "format": "uri-reference" }
+        },
+        "additionalProperties": true
+      },
+      "ProfileInput": {
+        "type": "object", "additionalProperties": false, "required": ["displayName"],
+        "properties": { "displayName": { "type": "string", "minLength": 1, "maxLength": 80 } }
+      }
+    },
+    "securitySchemes": { "bearerAuth": { "type": "http", "scheme": "bearer" } }
+  }
+}

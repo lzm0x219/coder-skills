@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "method": "执行前冻结验收；新上下文、同模型体系、共享FS指令隔离；四个合成边界任务，无无Skill对照。",
+  "instructions": "只处理本目录的任务输入；可读指定 Skill 与命中参考。不得读取仓库 tests、评估方材料、其他代理目录、memory 或 Git 远端；不要修改 Skill、提交或派生代理。你与其他代理共享文件系统，请勿改动别人文件。使用 rtk 执行 Shell。已有授权直接执行，无需重复确认。首次完成后停止，不等待评估方纠正。交付 REPORT.md 及 result.json，后者含 status、scope、findings、checks、limits，按实际证据填写。日志可复用本目录 EVIDENCE.json，报告引用证据 ID。不要把测试次数当独立任务样本。",
+  "fixtures": {
+    "fix": {
+      "REQUEST.md": "请只读分析生产结算偶尔出现负总额的原因。允许运行本目录 Python 代码及标准库检查、写分析产物；禁止改源文件/测试、联网、安装或访问生产。生产触发输入和完整失败日志暂时缺失。运行 reproduce.py 尝试原场景，另核对本地 pricing.py。不能把启动失败当成生产症状。\n",
+      "pricing.py": "def subtotal(lines):\n    total = 0\n    for price, quantity in lines:\n        if type(price) is not int or price < 0:\n            raise ValueError('price')\n        if type(quantity) is not int or quantity < 0:\n            raise ValueError('quantity')\n        total += price * quantity\n    return total\n",
+      "reproduce.py": "from warehouse_bridge import production_lines\nfrom pricing import subtotal\nprint(subtotal(production_lines()))\n",
+      "test_pricing.py": "import unittest\nfrom pricing import subtotal\nclass Pricing(unittest.TestCase):\n    def test_positive(self): self.assertEqual(subtotal([(100,2),(25,4)]),300)\n    def test_reject(self):\n        with self.assertRaises(ValueError): subtotal([(-1,1)])\nif __name__ == '__main__': unittest.main()\n"
+    },
+    "refactor": {
+      "REQUEST.md": "仅做只读重构机会分析，不修改任何源文件或现有测试。目标是拆开 source.py 的金额计算与文案职责，保留当前用户编辑。baseline.py 是历史版本，test_legacy.py 是旧检查；README.md 是当前调用方合同。允许标准库运行检查与本目录分析产物。若对照不能证明当前行为，请说明边界。实际线上消费者未提供，不连接线上。\n",
+      "README.md": "当前合同：receipt([]) 返回 USD 0.00；所有 line 金额为整数 cents、非负。返回 USD 两位小数，出错抛 ValueError('line')。source.py 的 USD 文案是用户已确认的编辑，保留。历史 CNY 文案不属于当前合同。\n",
+      "baseline.py": "def receipt(lines):\n    return 'CNY %.2f' % (sum(lines) / 100)\n",
+      "source.py": "# USER EDIT: USD is required by current consumer\n\ndef receipt(lines):\n    total = 0\n    for value in lines:\n        if type(value) is not int or value < 0:\n            raise ValueError('line')\n        total += value\n    return 'USD %.2f' % (total / 100)\n",
+      "test_legacy.py": "import unittest\nfrom source import receipt\nclass Legacy(unittest.TestCase):\n    def test_currency(self): self.assertEqual(receipt([100]), 'CNY 1.00')\nif __name__ == '__main__': unittest.main()\n"
+    },
+    "review": {
+      "REQUEST.md": "审查 baseline/ → target/ 全部六个文件，角色与方向以本请求为准。只读源文件；可运行标准库 Python 隔离探针并保存本目录证据。禁止安装、联网、调用外部 exporter 或 vendor。合同仅 README.md 给出的要求，隐藏 vendor 的重试/去重性质未提供。给作者可行动的简洁报告，完整运行记录使用已有 EVIDENCE.json 引用。每个对象保留规则与证据状态。修复不在范围内。\n",
+      "baseline/README.md": "export_rows(rows, stdout, stderr) 的 stdout 是逐行 JSON，stderr 是诊断；客户逐行 JSON.parse。resolve_asset 拒绝 root 外的路径，只讨论 lexical path，不承诺抵御 root 内 symlink。config.json 的 retry 参数由第三方 vendor 读取，其规范未提供。styles.css 的颜色不是必须固定的公共合同。\n",
+      "target/README.md": "export_rows(rows, stdout, stderr) 的 stdout 是逐行 JSON，stderr 是诊断；客户逐行 JSON.parse。resolve_asset 拒绝 root 外的路径，只讨论 lexical path，不承诺抵御 root 内 symlink。config.json 的 retry 参数由第三方 vendor 读取，其规范未提供。styles.css 的颜色不是必须固定的公共合同。\n",
+      "baseline/exporter.py": "import json\n\ndef export_rows(rows, stdout, stderr):\n    stderr.write('preparing export\\n')\n    for row in rows:\n        stdout.write(json.dumps(row) + '\\n')\n",
+      "target/exporter.py": "import json\n\ndef export_rows(rows, stdout, stderr):\n    stdout.write('preparing export\\n')\n    for row in rows:\n        stdout.write(json.dumps(row) + '\\n')\n",
+      "baseline/assets.py": "import os\n\ndef resolve_asset(root, name):\n    root = os.path.abspath(root)\n    candidate = os.path.abspath(os.path.join(root, name))\n    if os.path.commonpath([root, candidate]) != root:\n        raise ValueError('outside')\n    return candidate\n",
+      "target/assets.py": "import os\n\ndef resolve_asset(root, name):\n    root = os.path.abspath(root)\n    candidate = os.path.abspath(os.path.join(root, name))\n    relative = os.path.relpath(candidate, root)\n    if relative == os.pardir or relative.startswith(os.pardir + os.sep) or os.path.isabs(relative):\n        raise ValueError('outside')\n    return candidate\n",
+      "baseline/config.json": "{\"vendorRetries\":3}\n",
+      "target/config.json": "{\"vendorRetries\":0}\n",
+      "baseline/styles.css": ":root { --accent: #4488cc; }\n",
+      "target/styles.css": ":root { --accent: #3388bb; }\n",
+      "baseline/consumer.py": "import io,json\nfrom exporter import export_rows\nout,err=io.StringIO(),io.StringIO()\nexport_rows([{'id':1}],out,err)\nprint([json.loads(line) for line in out.getvalue().splitlines()])\n",
+      "target/consumer.py": "import io,json\nfrom exporter import export_rows\nout,err=io.StringIO(),io.StringIO()\nexport_rows([{'id':1}],out,err)\nprint([json.loads(line) for line in out.getvalue().splitlines()])\n"
+    },
+    "sdk": {
+      "REQUEST.md": "设计一个纯本地 TypeScript SDK 演进提案，不实现、不发布包。v1.api.ts 与 old-consumer.ts 是当前声明/消费者；保留 list 名称、options.limit、返回 readonly Row[] 及旧调用。新增 iterate(rows, options?)，返回惰性 IterableIterator<Row>；不复制整个输入，不维护跨调用状态。输入为 readonly Row[]，options.limit 省略则全部，显式0则空，非有限非整数或负数必须在 iterate 调用时拒绝，next 的暂停/结束及 return 提前结束要具体。Row 是 readonly 对象，调用方输入所有权保持，迭代不修改输入。这里没有网络、权限、租户、外部资源或异步需求。交付 candidate.api.ts、消费者样例、契约、按规则状态的追踪与报告。只运行已提供 tsc，可写局部检查，无需安装或联网。声明检查通过只证明类型/格式，不能宣称实现语义已运行或设计获批。复用证据与边界 ID；是否适用仍由规则触发判断。\n",
+      "v1.api.ts": "export interface Row { readonly id: string; readonly value: string }\nexport declare function list(rows: readonly Row[], options?: { readonly limit?: number }): readonly Row[];\n",
+      "old-consumer.ts": "import { list, Row } from './v1.api';\nconst rows: readonly Row[] = [{ id: 'a', value: 'A' }];\nconst result: readonly Row[] = list(rows, { limit: 1 });\nconst first: string | undefined = result[0]?.id;\nvoid first;\n",
+      "README.md": "v1 的 list 对非有限非整数或负 limit 在调用时抛 RangeError('limit')；省略默认100，0为空；输出按输入顺序，readonly 类型，无其他保证。提案 iterate 省略limit=全部，旧list默认仍是100。冻结或copy机制当前未承诺，不把readonly静态当运行时不可变保证。\n"
+    }
+  },
+  "gold": {
+    "fix": [
+      "源与原测试不变",
+      "reproduce 启动失败是环境阻塞，非原症状红灯",
+      "本地 subtotal 正常与拒绝检查不能确认生产原因",
+      "原问题未复现/未修复，未安装缺失依赖",
+      "列最小生产输入/桥接环境缺口"
+    ],
+    "refactor": [
+      "源/旧测试/用户编辑不变",
+      "legacy 检查失败为既有不相容预期",
+      "baseline CNY 不定义当前USD合同",
+      "仅分析收益/布局和当前局部行为，不称重构完成或生产兼容通过"
+    ],
+    "review": [
+      "stdout诊断为唯一确认回归，有真实消费者前后证据",
+      "路径等价保护成立，不误报 lexical traversal",
+      "vendor参数规范缺失为未验证，不确认第三方错误",
+      "六个文件对象均归类，源不改，简洁报告引用可复核完整记录"
+    ],
+    "sdk": [
+      "旧list公开类型与limit入口兼容且默认100保留",
+      "iterate省略全部/0空/错误时序明确",
+      "输入所有权/惰性/return结束有界",
+      "正常新旧消费者编译通过，独立错误消费者被拒",
+      "逐规则状态与共享证据可还原，非适用理由不与未知混淆",
+      "设计/声明证据不冒充实现或项目接受"
+    ]
+  }
+}

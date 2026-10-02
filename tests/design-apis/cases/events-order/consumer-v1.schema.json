@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.example.test/events/order-created-v1.json",
+  "type": "object",
+  "required": ["orderId", "revision"],
+  "properties": {
+    "orderId": { "type": "string", "minLength": 1 },
+    "revision": { "type": "integer", "minimum": 1 }
+  },
+  "additionalProperties": true
+}

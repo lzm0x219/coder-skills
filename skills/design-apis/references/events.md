@@ -1,44 +1,32 @@
 # 事件 API 设计规则
 
-适用于消息队列、事件总线和流式消息的生产者与消费者契约；HTTP 回调交付另见 [Webhook API](webhooks.md)。先确认传输协议、消息格式、broker 与项目已采用的规范版本。CloudEvents 规定事件封装，AsyncAPI 描述异步接口；两者本身都不能替代底层系统的投递保证。
+适用于消息 broker / event bus / stream 的 producer 与 consumer。先判断用户是在设计 domain event、message contract、broker profile、schema registry 还是事件消费状态，并固定协议/产品/版本；HTTP callbacks 走 [Webhook](webhooks.md)。触发具体分支时读取对应 reference：
 
-## 事件语义与封装
+- payload、identity、CloudEvents、schema evolution / registry → [schema](events/schema.md)
+- Kafka、AMQP 1.0、MQTT 5、NATS JetStream、delivery matrix、transactions / outbox → [broker profiles](events/brokers.md)
+- 事件处理流程的通用 ACK、排序、回放、DLQ、批量、event-time 和 observability 在 [broker profiles 的交付矩阵](events/brokers.md#交付矩阵适用于各-broker)
 
-1. 每种事件说明何种事实触发、谁生产、谁消费、事件类型、稳定身份及载荷含义。区分事实记录与当前对象快照；如果载荷可能因数据更新而与事件发生时状态不同，明确该语义。
-2. 采用 CloudEvents 时提供其必需的 `id`、`source`、`specversion` 和 `type`；同一 `source` 下的不同事件不得复用 `id`，重发同一事件可以沿用。`time` 是可选属性，不要把它误写成协议必填；使用它时定义时间来源。依据：[CloudEvents 1.0.2 稳定规范](https://github.com/cloudevents/spec/blob/ce@stable/cloudevents/spec.md)。
-3. 事件类型和载荷模式演进时，列出新旧消费者同时运行的窗口。新增必填字段、重释旧字段、删除枚举值或改变事件触发时机，均先作为潜在破坏性变化评估；版本放在类型名、schema 或载荷中的方式遵循项目既有约定。
+## 原有规则索引
 
-## 投递与消费
+保留 E01–E09 标识，供已有消费者和设计记录追踪；以下是简述，具体动作、边界及来源以链接文件为准。
 
-4. 说明消息在哪个范围内可能重复、乱序、延迟或重放，确认、重试、死信和补偿由谁负责。去重键应与事件身份一致，并覆盖可能的重试窗口；不要把 broker 对单分区的顺序误写成全局顺序，也不要无依据承诺恰好一次业务效果。
-5. 对可重放事件说明保留期、重放入口和消费者恢复位点。数据可能包含个人或敏感信息时，核对载荷最小化、访问边界和保留期限；这些属于项目策略，不由 CloudEvents 自动决定。
-6. 使用 AsyncAPI 时按项目所用版本描述 channel、消息、发送/接收 operation 和协议 binding，并使示例消息符合实际 schema。文档描述的是接口契约；运行时的确认与投递保证仍需从 broker 和部署配置核验。依据：[AsyncAPI Specification 3.1.0](https://www.asyncapi.com/docs/reference/specification/v3.1.0)。
+| ID | 持续适用范围 | 详细规则 |
+|---|---|---|
+| E01 | domain event 语义与发出时点 | [ES01](events/schema.md#规则) |
+| E02–E03 | CloudEvents envelope、stable identity、context 类型与 JSON 映射 | [ES02、ES10–ES11](events/schema.md#规则) |
+| E04 | schema/事件类型演进和旧 consumer window | [ES04–ES06](events/schema.md#规则) |
+| E05–E07 | broker-specific ordering、delivery、retry、replay | [Kafka / AMQP / MQTT / JetStream](events/brokers.md) |
+| E08 | AsyncAPI document 和 protocol binding | [AsyncAPI delivery](#asyncapi-交付) |
+| E09 | 安全、容量、保留与删除 | [ES07–ES08](events/schema.md#规则)、[broker matrix](events/brokers.md#交付矩阵适用于各-broker) |
 
-## 落地时填写
+## AsyncAPI 交付
 
-每个事件类型形成一份生产者与消费者都能使用的契约：
+采用 AsyncAPI 时锁定文档版本、validator 版本及 protocol binding version。具体接口描述 application operations 的 send/receive 方向、channel/address、message variants、payload schema/contentType、correlation/security 和 broker binding。它是 machine-readable interface contract，不是 broker runtime configuration；协议文档的可选字段不能臆称格式强制，但 Skill 交付需要的具体 contract facts 不能缺失。由对应版本 validator 检查格式，并另外验证 bindings 对目标 broker 的参数是否真实可部署。[AsyncAPI 3.1.0](https://www.asyncapi.com/docs/reference/specification/v3.1.0) 的 MUST 只用于 3.1.0 文档。
 
-| 项 | 必须给出的具体值 |
-| --- | --- |
-| 发生 | 触发事实、发出时点、生产者；是事实记录还是当时的对象快照 |
-| 身份 | 类型名、事件 ID 的唯一范围、重发时 ID 是否保持不变 |
-| 载荷 | schema 与示例、字段必填/缺省、版本或迁移规则 |
-| 传递 | channel/topic、分区或排序键、顺序保证的范围 |
-| 失败 | 确认点、重试条件与次数/窗口、死信处理和重放入口 |
-| 生命周期 | 保留期、旧消费者兼容期、敏感数据的删除或访问边界 |
+## 完成交付检查
 
-若采用 CloudEvents，可用下列最小事件验证封装；`time` 未出现是合法的：
+每个适用设计分支要么给 evidence artifact，要么标“不适用+业务原因”；缺失需求写明 owner/待决定事实/决策影响。至少提交消息方向、channel/address、payload/schema、producer/consumer principal、event identity、确认与副作用边界、排序 domain、retry/poison/DLQ、retention/replay/offset、limit/batch/compression/backpressure 和监控值。数值只能从业务约束、目标 provider 限制或部署 configuration 推导；不能使用文档里的 example/default 冒充目标项目承诺。
 
-```json
-{
-  "specversion": "1.0",
-  "id": "evt-42",
-  "source": "/orders",
-  "type": "com.example.order.created",
-  "data": { "orderId": "42" }
-}
-```
+固定 schema/vector 可运行检查证明所校验 bytes/cases 与 schema/profile 一致。它不证明 broker 投递、ACL 实际部署、队列容量、顺序、回放、outbox/inbox DB 原子性或 end-to-end exactly-once。需要这些保证时，必须用目标 broker/DB 的故障注入与恢复演练验收。
 
-同一事件重投时沿用 `source` + `id`；另一件订单创建即使载荷相同，也必须产生新的 ID。验收至少模拟重复投递、乱序投递、消费者处理失败后重试，以及旧消费者读新载荷；检查真实 broker 配置是否兑现文档写下的顺序和保留承诺。
-
-可复查的[事件 schema 与缺失身份反例](../tests/fixtures/events-order/contract.md)验证一个固定消息形状和去重键模型；broker 保证仍须部署验证。
+固定样例：[原事件演进与乱序 cases](../../../tests/design-apis/cases/events-order/contract.md)。研究来源和规则取舍：[事件与 Webhook 来源](sources.md#events-webhooks)。

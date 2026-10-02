@@ -1,0 +1,22 @@
+query OldConsumer {
+  order(id: "42") { id legacyNote }
+}
+
+mutation UpdateOrder($id: ID!, $input: UpdateOrderInput!) {
+  updateOrder(id: $id, input: $input) { id note priority displayLabel }
+}
+
+query TwoOrderReads {
+  primary: order(id: "42") { id }
+  related: order(id: "43") { id }
+}
+
+query ThreeAliasedOrderReads {
+  first: order(id: "42") { id }
+  second: order(id: "43") { id }
+  third: order(id: "44") { id }
+}
+
+query NullableNoteFailure {
+  order(id: "42") { id note }
+}

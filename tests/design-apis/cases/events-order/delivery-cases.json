@@ -1,0 +1,15 @@
+{
+  "guarantee": "at-least-once",
+  "orderingScope": "per-order partition key",
+  "consumerPolicy": "apply only a revision greater than the current aggregate revision; gaps are parked for reconciliation",
+  "retry": {
+    "transient": { "maxAttempts": 5, "backoff": "exponential with jitter", "onExhaustion": "dead-letter and alert" },
+    "permanent": { "maxAttempts": 1, "onFailure": "dead-letter and alert" }
+  },
+  "replay": { "retentionDays": 30, "offsetOwner": "consumer group", "sideEffects": "same idempotency boundary as live delivery" },
+  "sequences": [
+    { "name": "normal", "revisions": [1, 2], "expectedRevision": 2 },
+    { "name": "out-of-order", "revisions": [2, 1], "expectedRevision": 2 },
+    { "name": "gap", "revisions": [1, 3], "expectedRevision": 1, "parkForReconciliation": true }
+  ]
+}

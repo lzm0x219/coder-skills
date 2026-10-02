@@ -1,0 +1,8 @@
+{
+  "specversion": "1.0",
+  "id": "evt-invalid-source",
+  "source": "not a URI reference",
+  "type": "com.example.order.created.v1",
+  "datacontenttype": "application/json",
+  "data": { "orderId": "42", "revision": 1 }
+}

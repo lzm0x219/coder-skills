@@ -1,0 +1,42 @@
+{
+  "scenarios": {
+    "behavior-async": {
+      "base": {
+        "app.py": "async def checkout(order_id, gateway, store):\n    if store.get(order_id) == \"paid\":\n        return \"paid\"\n    await gateway.charge(order_id)\n    store[order_id] = \"paid\"\n    return \"paid\"\n",
+        "contract.md": "An order may be charged at most once. A timeout can happen after the gateway commits the charge; timeout alone does not mean no charge occurred. The local order is marked paid only after the caller receives success.\n"
+      },
+      "target": {
+        "app.py": "async def checkout(order_id, gateway, store):\n    if store.get(order_id) == \"paid\":\n        return \"paid\"\n    try:\n        await gateway.charge(order_id)\n    except TimeoutError:\n        await gateway.charge(order_id)\n    store[order_id] = \"paid\"\n    return \"paid\"\n",
+        "contract.md": "An order may be charged at most once. A timeout can happen after the gateway commits the charge; timeout alone does not mean no charge occurred. The local order is marked paid only after the caller receives success.\n"
+      }
+    },
+    "behavior-package": {
+      "base": {
+        "README.md": "Consumer contract: `require('fixture-widget').version` returns `1`.\n",
+        "contract.md": "The published CommonJS entry point is stable. Installing the package and requiring its root returns an object with `version === 1`.\n",
+        "dist/index.cjs": "module.exports = { version: 1 };\n",
+        "package.json": "{\n  \"name\": \"fixture-widget\",\n  \"version\": \"1.0.0\",\n  \"main\": \"./dist/index.cjs\",\n  \"exports\": {\n    \".\": \"./dist/index.cjs\"\n  },\n  \"files\": [\n    \"dist/index.cjs\",\n    \"README.md\",\n    \"contract.md\"\n  ]\n}\n"
+      },
+      "target": {
+        "README.md": "Consumer contract: `require('fixture-widget').version` returns `1`.\n",
+        "contract.md": "The published CommonJS entry point is stable. Installing the package and requiring its root returns an object with `version === 1`.\n",
+        "dist/index.cjs": "module.exports = { version: 1 };\n",
+        "package.json": "{\n  \"name\": \"fixture-widget\",\n  \"version\": \"1.0.0\",\n  \"main\": \"./dist/index.cjs\",\n  \"exports\": {\n    \".\": \"./dist/next.cjs\"\n  },\n  \"files\": [\n    \"dist/index.cjs\",\n    \"README.md\",\n    \"contract.md\"\n  ]\n}\n"
+      }
+    },
+    "behavior-ui": {
+      "base": {
+        "app.js": "let nextRequest = 0;\n\nasync function refresh(query, fetchData, state) {\n  const requestId = ++nextRequest;\n  state.query = query;\n  state.loading = true;\n  try {\n    const result = await fetchData();\n    if (requestId === nextRequest) state.result = result;\n  } finally {\n    state.loading = false;\n  }\n}\n\nmodule.exports = { refresh };\n",
+        "contract.md": "For each search, the view remains loading until the latest/current request settles. A stale request may not clear loading for a newer request or overwrite its result.\n"
+      },
+      "target": {
+        "app.js": "let nextRequest = 0;\n\nasync function refresh(query, fetchData, state) {\n  const requestId = ++nextRequest;\n  state.query = query;\n  state.loading = true;\n  try {\n    const result = await fetchData();\n    if (requestId === nextRequest) state.result = result;\n  } finally {\n    if (requestId === nextRequest) state.loading = false;\n  }\n}\n\nmodule.exports = { refresh };\n",
+        "contract.md": "For each search, the view remains loading until the latest/current request settles. A stale request may not clear loading for a newer request or overwrite its result.\n"
+      }
+    }
+  },
+  "harness": {
+    "async_replay.py": "import asyncio\nimport pathlib\nimport sys\n\n\nclass Gateway:\n    def __init__(self):\n        self.count = 0\n        self.events = []\n\n    async def charge(self, order_id):\n        self.count += 1\n        self.events.append(f\"commit:{order_id}:{self.count}\")\n        if self.count == 1:\n            self.events.append(\"response-timeout-after-commit\")\n            raise TimeoutError(\"ack lost after external commit\")\n        self.events.append(\"ack\")\n\n\nasync def observe(version, root):\n    path = root / version / \"app.py\"\n    namespace = {}\n    exec(compile(path.read_text(), str(path), \"exec\"), namespace)\n    gateway = Gateway()\n    store = {}\n    try:\n        outcome = await namespace[\"checkout\"](\"order-7\", gateway, store)\n    except Exception as exc:\n        outcome = f\"{type(exc).__name__}: {exc}\"\n    print(version, {\n        \"outcome\": outcome,\n        \"gateway_events\": gateway.events,\n        \"charge_count\": gateway.count,\n        \"store\": store,\n    })\n\n\nasync def main():\n    root = pathlib.Path(sys.argv[1])\n    await observe(\"base\", root)\n    await observe(\"target\", root)\n\n\nasyncio.run(main())\n",
+    "ui_replay.js": "const fs = require(\"fs\");\nconst vm = require(\"vm\");\nconst path = require(\"path\");\n\nfunction deferred() {\n  let resolve;\n  const promise = new Promise((r) => { resolve = r; });\n  return {promise, resolve};\n}\n\nasync function observe(version, root) {\n  const file = path.join(root, version, \"app.js\");\n  const module = {exports: {}};\n  vm.runInNewContext(fs.readFileSync(file, \"utf8\"), {\n    module,\n    exports: module.exports,\n  });\n  const state = {query: \"\", loading: false, result: \"none\"};\n  const old = deferred();\n  const current = deferred();\n  const oldTask = module.exports.refresh(\"old\", () => old.promise, state);\n  const currentTask = module.exports.refresh(\"current\", () => current.promise, state);\n  old.resolve(\"old-result\");\n  await oldTask;\n  const whileCurrentPending = {...state};\n  current.resolve(\"current-result\");\n  await currentTask;\n  console.log(version, {\n    whileCurrentPending,\n    afterCurrent: {...state},\n  });\n}\n\nasync function main() {\n  const root = process.argv[2];\n  await observe(\"base\", root);\n  await observe(\"target\", root);\n}\n\nmain().catch((error) => {\n  console.error(error);\n  process.exitCode = 1;\n});\n"
+  }
+}

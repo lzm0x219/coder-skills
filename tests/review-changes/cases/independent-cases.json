@@ -1,0 +1,35 @@
+[
+  {
+    "id": "01-legal-boundary",
+    "base_sha": "d612b35115a5513b292734d7e038cc428bc9e374",
+    "target_sha": "689937c57fbec6e5df87cc113adf91b599e654f3",
+    "contract": "Contract: limit is an integer in [0, 100]. Zero means return zero rows. Missing limit defaults to 20.",
+    "before": "def limit_rows(rows, limit=None):\n    if limit is None:\n        limit = 20\n    if not 0 <= limit <= 100:\n        raise ValueError(\"out of range\")\n    return rows[:limit]\n",
+    "target": "def limit_rows(rows, limit=None):\n    if limit is None:\n        limit = 20\n    if limit < 0 or limit > 100:\n        raise ValueError(\"out of range\")\n    return rows[:limit]\n"
+  },
+  {
+    "id": "02-cross-tenant",
+    "base_sha": "1be40903785d9a298544423f01162ce71961c078",
+    "target_sha": "675dc2a3f629c86be24fb0fbb972fd92b7cad469",
+    "contract": "Contract: a caller may read records belonging only to the requested tenant_id.",
+    "before": "def read_records(records, tenant_id):\n    return [r for r in records if r['tenant_id'] == tenant_id]\n",
+    "target": "def read_records(records, tenant_id):\n    return records\n"
+  },
+  {
+    "id": "03-equivalent-guard",
+    "base_sha": "c0ad6c68fb2bd5a6cfe2a7fe4e456e94bcb49ffa",
+    "target_sha": "86146e672571b22fd230efac42520c4f258e7df9",
+    "contract": "Contract: tenant_id must be present; read_records returns only requested tenant rows. Missing tenant raises ValueError.",
+    "before": "def read_records(records, tenant_id):\n    if not tenant_id:\n        raise ValueError('tenant required')\n    return [r for r in records if r['tenant_id'] == tenant_id]\n",
+    "target": "def read_records(records, tenant_id):\n    if tenant_id is None:\n        raise ValueError('tenant required')\n    matching = (r for r in records if r['tenant_id'] == tenant_id)\n    return list(matching)\n"
+  },
+  {
+    "id": "04-layered-scope",
+    "base_sha": "34820b3be6644937fa40bf780bffac20dbd25ff3",
+    "target_sha": null,
+    "contract": "Contract: read_records returns rows only for requested tenant_id.",
+    "before": "def read_records(records, tenant_id):\n    return [r for r in records if r['tenant_id'] == tenant_id]\n",
+    "index": "def read_records(records, tenant_id):\n    if tenant_id is None:\n        raise ValueError('tenant required')\n    return [r for r in records if r['tenant_id'] == tenant_id]\n",
+    "target": "def read_records(records, tenant_id):\n    if tenant_id is None:\n        raise ValueError('tenant required')\n    return records\n"
+  }
+]

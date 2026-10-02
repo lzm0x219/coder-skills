@@ -1,0 +1,5 @@
+# HTTP 契约描述与演进
+
+**H37｜OpenAPI 可验证契约｜交付 OAS 时。** 固定 OpenAPI 版本并声明 servers；组合 server URL 与 path 得到可调用完整 URL。每个 operation 描述参数位置/序列化、请求媒体类型、预期状态响应、鉴权、分页/条件头、请求/响应 schema 和有代表性的示例；若提供 `operationId` 则必须全描述唯一，若依赖代码生成/链接则将其设为项目必填。Security Requirement 中同一对象多 scheme 表示 AND，数组中多个对象表示 OR；显式 `{}` 表示匿名可访问。Schema 校验只证明形状，不证明状态码、原子性、授权、重试或状态转换；这些另用语义断言。示例与 schema 同版本校验，禁止用未声明的错误码/字段。证据：规范 lint、示例 validate、operationId 唯一、鉴权组合解释和协议行为测试。依据：[OpenAPI 3.1.1 §4.8.10, §4.8.30](https://spec.openapis.org/oas/v3.1.1.html#operation-object)。
+
+**H38｜版本和弃用｜公开入口已有消费者或将发生不兼容变更时。** 先区分兼容性等级和消费者迁移能力；添加字段/枚举值也需评估严格解析、生成客户端、默认值与 exhaustive switch。宣布弃用时提供替代入口、差异、迁移步骤、支持结束日期/信号来源及撤除门槛；在旧契约撤除前确认实际使用/通知机制。选择 URI、query/header 或媒体类型版本方案时，定义缓存键、文档入口、并行支持及迁移策略，不宣称任何一种版本放置位置是唯一标准。若必须破坏兼容，发布清晰的新主版本/新契约并保留旧消费者可预测的终止窗口。证据：原始客户端请求、旧 schema 消费编译/验证、新旧版本并存、弃用通知与截止日期。参考：Google [AIP-180](https://google.aip.dev/180)、[AIP-181](https://google.aip.dev/181)、[AIP-185](https://google.aip.dev/185)；Microsoft [versioning](https://learn.microsoft.com/en-us/azure/architecture/best-practices/api-design#implement-versioning)。

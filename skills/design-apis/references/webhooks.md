@@ -1,36 +1,36 @@
 # Webhook API 设计规则
 
-适用于本服务发送 HTTP 回调，也适用于接收第三方 Webhook；HTTP 方法和状态码语义按需结合 [HTTP API](http.md)。没有适用于所有 Webhook 提供者的统一投递、超时和签名规范。先确认本项目是提供者还是接收者，以及已采用的服务商契约。接收第三方事件时，先以服务商文档确定请求头、验签字节、事件身份、超时及重投规则，再设计本地去重和确认点；不要反过来要求服务商遵守本项目的发送端偏好。
+Webhook 同时是 HTTP callback 和至少两方约定的 delivery profile。先识别自有 sender、自有 receiver、第三方 provider、用户可管理 subscription 哪些在 scope 内，再按条件读取分支 reference：
 
-## 消息与投递
+- 原有 WH01–WH11 规则身份和简述 → 下表
+- subscription 创建、ownership、endpoint SSRF、pause/delete、delivery receipts → [lifecycle](webhooks/lifecycle.md)
+- 自有 provider 发送、重试/receipt/batch/outbox → [sender](webhooks/sender.md)
+- 自有 receiver 的 verify→parse→durable intake→ACK、幂等、迟到/毒事件 → [receiver](webhooks/receiver.md)
+- raw bytes、HMAC/RFC9421、rotation、freshness/replay → [signatures](webhooks/signatures.md)
+- GitHub / Stripe / Standard Webhooks-specific behavior → [profiles](webhooks/profiles.md)
 
-1. 定义回调 URL、方法、内容类型、事件类型与动作、事件身份、投递尝试身份、发生时间和载荷版本。事件 ID 用于同一事实去重，尝试 ID 用于追踪一次发送；两者是否相同、重发时是否变化必须写清。
-2. 规定哪些响应表示已接收、多久未应答视作失败、何时重试、重试上限和终止后如何补发或查询。接收方耗时处理时，区分“已可靠接收”与“业务处理完成”，明确确认点；不要把某个平台的固定超时直接照搬到其他平台。
-3. 声明重复、乱序、延迟与重放是否可能出现。接收方按事件身份做幂等处理；提供方应记录投递结果并让调用方能排查和补发失败。没有基础设施保证时，不承诺全局顺序或恰好一次业务效果。
+## 原有规则索引
 
-## 验证与安全
+保留 WH01–WH11，避免丢失旧引用；细化的强度、条件、动作、恢复和证据以按需文件为准。
 
-4. 回调应能认证来源并检查完整性；若采用签名，明确签名覆盖哪些原始字节或 HTTP 组件、算法标识、密钥标识、轮换方式和验证失败的处理。不要把秘密放在 URL、示例载荷或日志中。
-5. 设计重放防护：事件或投递 ID 去重，必要时结合签名时间、过期时间或 nonce；去重记录的保留期要覆盖允许重试与补发的窗口。采用 [RFC 9421 HTTP Message Signatures](https://www.rfc-editor.org/rfc/rfc9421.html) 时按其组件和签名参数规则实施；未采用时不要声称兼容。
-6. 用有效、签名无效、重复、乱序、接收方超时和补发场景走查双方行为。接收现有服务商 Webhook 时，以其官方文档为准；例如 [GitHub Webhook 最佳实践](https://docs.github.com/en/webhooks/using-webhooks/best-practices-for-using-webhooks)中的超时和投递头字段只适用于对应服务。
+| ID | 规则范围 | 详细分支 |
+|---|---|---|
+| WH01 | parties、event/delivery/attempt ID、subscription contract | [lifecycle](webhooks/lifecycle.md)、[sender](webhooks/sender.md) |
+| WH02–WH06 | exact signed input、profile-specific MAC/signature、freshness/rotation | [signatures](webhooks/signatures.md)、[profiles](webhooks/profiles.md) |
+| WH07 | ACK/status-code、retry/backoff/termination | [sender](webhooks/sender.md)、[profiles](webhooks/profiles.md) |
+| WH08 | verified → durable accepted → business processed 状态 | [receiver](webhooks/receiver.md) |
+| WH09 | key/credential rotate/revoke | [signatures](webhooks/signatures.md)、[lifecycle](webhooks/lifecycle.md) |
+| WH10 | user-supplied endpoint SSRF/egress/TLS/redirects | [lifecycle](webhooks/lifecycle.md)、[sender](webhooks/sender.md) |
+| WH11 | unknown event/action/schema、untrusted routing header | [receiver](webhooks/receiver.md)、[profiles](webhooks/profiles.md) |
 
-新建 Webhook 契约可评估 [Standard Webhooks 草案](https://github.com/standard-webhooks/standard-webhooks/blob/main/spec/standard-webhooks.md) 的通用元数据与签名约定；它不是所有服务商已采用的强制标准。
+## 规则等级
 
-## 落地时填写
+表内 “协议 MUST” 仅在确切采用标准和版本时生效；“provider MUST” 仅约束对应提供方；“Skill MUST” 是本设计 Skill 的交付门槛，不是外部标准。社区 interoperability profile（如 Standard Webhooks）需注明 pinned version 和兼容性偏离。HTTP 2xx 不是通用 Webhook receipt；contract 必须指定其代表已入队、已接收或业务已完成的哪一个 durable milestone。
 
-对每种回调分别写出提供者与接收者的责任，不能只写“发送事件”：
+## 提交与验证
 
-| 项 | 必须给出的具体值 |
-| --- | --- |
-| 请求 | URL 约束、方法、内容类型、事件/动作字段、载荷 schema 与版本 |
-| 身份 | 事件 ID 与投递尝试 ID 的含义；同一事件重发时各字段是否保持不变 |
-| 签名 | 签名头、覆盖内容、算法、密钥来源和轮换、时间或 nonce 校验 |
-| 确认 | 哪些响应表示成功、接收超时、何时可返回成功 |
-| 重试 | 哪些结果重试、间隔与上限、终止后的人工或自动补发入口 |
-| 追踪 | 投递日志可查询范围、保留期、敏感字段遮蔽 |
+适用方向须交付 operation/API surface（当自有控制面 scope 内）、subscription state lifecycle、event schema/catalog、URL ownership + SSRF 边界、身份/签名组件表、attempt/delivery/event ID 语义、状态码与恢复矩阵、duplicate/out-of-order/poison policy、receipt 保留和告警。按 C06 记录各规则的证据或不适用原因；数值注明业务 owner/source，依赖外部事实的缺项保持未决，可由设计者决定的值按 C02 给出有界候选。
 
-接收方先按已采用的认证或签名方案验证来源与完整性，再根据事件 ID 去重和执行业务处理；若签名方案覆盖原始请求体，不要先解析并重新序列化 JSON 再验签。把“已持久接收”与“业务已完成”的确认语义分开。提供方的重试窗口若长于接收方去重保留期，应明确超期重发的风险。
+raw bytes / official vector / policy state simulation 仅证明合同样例或 verifier 对给定向量的局部行为；不证明互联网传输、签名 secret 落盘、订阅租户授权、durable database atomicity 或真实 provider redelivery。声明生产保证须提供其对应系统的集成和故障恢复证据。
 
-具体例子：接收 **GitHub** Webhook 时，依据其官方规则校验 `X-Hub-Signature-256`，使用 `X-GitHub-Delivery` 识别同一次事件的重发，并在 **10 秒内**返回 `2xx`；这些字段与时限只属于 GitHub，不应写成所有 Webhook 的默认值。验收时分别发送签名无效、同一 delivery 重发、处理耗时超过时限和未知事件类型的请求，核对实际响应及副作用。[GitHub 验签文档](https://docs.github.com/en/webhooks/using-webhooks/validating-webhook-deliveries)、[最佳实践](https://docs.github.com/en/webhooks/using-webhooks/best-practices-for-using-webhooks)。
-
-可复查的[GitHub 接收端验签与重复投递样例](../tests/fixtures/webhook-github/contract.md)检查原始字节签名与接收模型；数据库持久化和真实 GitHub 投递仍须单独验证。
+既有固定检查：[GitHub receiver 与 self-owned sender](../../../tests/design-apis/cases/webhook-github/contract.md)。一手来源及研究推导：[事件与 Webhook 来源](sources.md#events-webhooks)。HTTP 的通用 method/status 规则见 [HTTP API](http.md)。

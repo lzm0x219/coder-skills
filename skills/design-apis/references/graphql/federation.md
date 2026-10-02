@@ -1,0 +1,11 @@
+# GraphQL Federation 与 Schema 组合
+
+仅当服务显式采用 Apollo Federation 时读取；固定 Federation major/minor 版本与 router/subgraph 实现。GraphQL core 没有 Federation 指令，这些均是所选生态规范中的约束。
+
+**G28｜组合能力｜声明为 subgraph 时。** 用目标 Federation 版本的 composition 工具检查 SDL，而不是只用 core GraphQL parser；保证版本 directive、`_service`/entity resolvers、引用指令和 router 的能力集一致。composition error 必须阻断发布并指出 subgraph/字段原因；部署检查覆盖实际 supergraph schema。不要为了通过合成而把不完整字段标为 shareable/inaccessible。证据：成功 composition、故意冲突/缺指令时失败、router 查询计划验证。依据：[v2.9 指令 SDL](https://specs.apollo.dev/federation/v2.9/federation-v2.9.graphql)、[滚动 subgraph 文档](https://www.apollographql.com/docs/graphos/schema-design/federated-schemas/reference/subgraph-spec)与[composition rules](https://www.apollographql.com/docs/graphos/schema-design/federated-schemas/reference/composition-rules)。feature 标识 URL 可能重定向到滚动说明；不要据此将说明页面误当固定 v2.9 全文，能力仍由目标 composer/router 版本核验。
+
+**G29｜实体键｜使用 `@key` 标识跨 subgraph entity 时。** 键字段必须在实体所有生命周期阶段稳定且足以唯一定位；描述 reference resolution 的输入/未找到行为和授权上下文。若 `resolvable:false` 或复合/嵌套 key，逐项验证目标 Federation 版本支持和 router 查询计划。键值不是权限凭证；entity resolver 每次都做对象级鉴权。键替换/增删先安排并行可解析迁移，再撤旧 key。证据：每个 key 对应对象一致、缺失/伪造 key、跨租户 key 访问和 rolling migration。依据：Federation [@key](https://specs.apollo.dev/federation/v2.9/#key)、Apollo [Introduction to Entities](https://www.apollographql.com/docs/graphos/schema-design/federated-schemas/entities/intro)。
+
+**G30｜字段所有权｜多个 subgraph 共同呈现同一实体时。** 对每个业务字段指定单一权威写入/解析来源；重复定义的对象/标量字段只有在运行语义、nullability 和数据一致性都能满足所选 Federation 规则时才共享。`@shareable` 表达可由多个 subgraph 独立 resolve，不代表两个值在所有情况下可任意不同。字段迁移用 override/可组合版本明确来源切换次序和回滚；不能让路由依赖不一致副本。证据：composition、分别路由到来源 subgraph 时值相同、迁移窗口与回滚查询。依据：Federation [Sharing Types](https://www.apollographql.com/docs/graphos/schema-design/federated-schemas/sharing-types)、[`@shareable`](https://specs.apollo.dev/federation/v2.9/#shareable)、[`@override`](https://specs.apollo.dev/federation/v2.9/#override)。
+
+**G31｜跨 subgraph 授权和代价｜查询会跨服务解析实体/字段时。** 定义用户身份/权限如何传递与验证，实体 resolver 不得因从 router 内部调用而信任所有表示值；高成本边界放在路由/字段/服务层并计入 G20。列出 fan-out 上界、超时、部分失败和可观测关联 ID，避免 supergraph 表面单次 query 隐藏 N 个下游请求。证据：未授权 entity representation、router/downstream trace、一个 subgraph 慢/失败时的部分响应及成本限额。参考：Apollo [authentication and authorization](https://www.apollographql.com/docs/graphos/routing/security/authorization)、[N+1](https://www.apollographql.com/docs/graphos/schema-design/guides/handling-n-plus-one)。

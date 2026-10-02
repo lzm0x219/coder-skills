@@ -1,8 +1,6 @@
 # 来源与规则映射
 
-本文件维护来源与映射；执行规则以指向的入口和参考章节为准。
-
-核验日期：2026-10-01。RF 编号是本项目的追踪编号，不是行业标准条款号。
+核对出处、修改规则或评估标准符合性时读取。本页只维护来源；执行要求以所指章节为准。来源核验日期为 2026-10-01，RF 是项目追踪编号。
 
 ## 依据层级
 
@@ -11,7 +9,7 @@
 - 项目机制：本 Skill 的授权、状态或证据管理设计，不冒充外部标准要求。
 - 标准背景：只核验官方版本与摘要，用于组织过程或质量目标；尚无规范性条款映射。
 
-方法依据、规则实施、行为评测及正式标准符合性是不同结论。本映射不构成 ISO 合规声明；拟作正式符合性评估时，需取得适用版本的规范性全文，确认适用条款、裁剪与组织要求，再逐条收集证据。沿用任务授权，不因参考标准自行扩大修改、访问或审批范围。
+正式符合性评估须取得适用版本规范性全文，确认条款、裁剪与组织要求，再逐条取证。此映射只证明方法出处，不构成 ISO 合规声明；执行仍沿用任务授权。
 
 ## 来源登记
 
@@ -43,28 +41,26 @@ W01 的正式配置基线涉及批准与变更控制；本 Skill 的运行前工
 
 ## 执行映射
 
-证据类型记录现有评测达到的层级；案例标准见 [rubric](../tests/rubric.md)，运行材料与结论见 [初版评测](../tests/evaluations/refactor-code-2026-10-01.md)和[状态修订评测](../tests/evaluations/state-machine-rules-2026-10-01.md)。
+案例与运行证据由[评测协议](../../../tests/refactor-code/methods/capability.md)及[测试入口](../../../tests/refactor-code/README.md)维护；此表只回答规则从何而来。
 
-| ID | 权威规则位置 | 来源与定位 | 依据层级 | 状态门槛 | 案例 ID | 已有证据类型 |
-| --- | --- | --- | --- | --- | --- | --- |
-| RF01 | [重构行为边界](../SKILL.md#重构代码) | F01 Definition；W01 第7章 §4.2 | 原文支持 | S0/S1/S4 | library, async, duplicate | 受控运行 |
-| RF02 | [公开契约与消费者观察](compatibility.md#观察细则) | F02；W01 第3章 §1.4 | 方法推导 | S1/S4 | library | 受控运行 |
-| RF03 | [职责和结构收益](structure.md#从维护摩擦推导职责)及[结构证据](structure.md#结构证据) | F01 改善目的；W01 第3章 §1.4 | 方法推导 | S0/S2/S4 | library, duplicate | 受控运行与结构走查 |
-| RF04 | [移动与共享规则](structure.md#目录重设计)及[去重复](structure.md#去重复与抽象) | F03 摘要；W01 第3章 §1.4 | 方法推导 | S2/S3 | library, duplicate | 受控运行与结构走查 |
-| RF05 | [小步实施与检查](../SKILL.md#s3-分步实施) | F01 小步变换和 frequent testing | 原文支持 | S3 | changed-baseline | 分阶段运行 |
-| RF06 | [影响范围和回归选择](verification.md#验证顺序) | W01 第7章 §2.1.3；第5章 §2.2.5 | 方法推导 | S1/S3/S4 | library, async, missing-artifact | 受控运行与状态走查 |
-| RF07 | [基线和证据身份](compatibility.md#兼容账) | W01 第8章 §2.1–2.4、§2.6 | 方法推导 | S0/S1/S4 | changed-baseline, dirty | 分阶段运行与受控运行 |
-| RF08 | [证据失效返回](recovery.md#工作区变化与证据失效) | W01 的配置与测试关联是背景；具体返回状态为项目设计 | 项目机制 | S0/S1/S2/S3 | changed-baseline, stale-evidence | 分阶段运行与状态走查 |
-| RF09 | [失败分类与隔离边界](recovery.md#检查失败)及[范围收缩](recovery.md#环境缺失与范围收缩) | 项目证据管理设计；W01 影响分析为背景 | 项目机制 | S1/S3/S5 | baseline, unavailable, incomparable, coupling-gap | 受控运行与状态走查 |
-| RF10 | [检查预期与行为变化](recovery.md#保护检查的观察)及[混合任务验收](../SKILL.md#s2-选定结构方案) | F01 行为保持；F04 Final Thoughts；具体失败保护为项目设计 | 方法推导 | S1/S2/S4 | bad-check, changed-baseline | 带提示运行与分阶段运行 |
-| RF11 | [交付结论](verification.md#完成判断) | I03 官方摘要仅为质量目标背景；具体结论为项目设计 | 项目机制 | S4/S5 | library, unavailable, readonly | 受控运行与结构走查 |
-| RF12 | [中断恢复](recovery.md#中断恢复) | 项目状态设计；W01 配置身份为背景 | 项目机制 | S0/S1/S2/S3 | changed-baseline, resume | 分阶段运行与状态走查 |
-| RF13 | [用户编辑及授权变化](recovery.md#工作区变化与证据失效) | 当前任务与项目权限约束；不归因于 ISO | 项目机制 | S0/S3/S5 | dirty, readonly, revoked | 受控运行与状态走查 |
-| RF14 | [运行制品与消费者](compatibility.md#观察细则)及[验证顺序](verification.md#验证顺序) | W01 第8章 §2.6；平台相关细则为方法推导 | 方法推导 | S3/S4 | library, missing-artifact | 受控运行与状态走查 |
-| RF15 | [正式标准声明边界](basis.md#依据层级) | I01 Abstract；I02 Abstract | 标准背景 | S0/S5 | basis | 静态来源核验 |
+| ID | 权威规则位置 | 来源与定位 | 依据层级 |
+| --- | --- | --- | --- |
+| RF01 | [行为边界](../SKILL.md#重构代码) | F01 Definition；W01 第7章 §4.2 | 原文支持 |
+| RF02 | [消费者观察](compatibility.md#观察细则) | F02；W01 第3章 §1.4 | 方法推导 |
+| RF03 | [职责](structure.md#从维护摩擦推导职责)与[收益](structure.md#结构证据) | F01 改善目的；W01 第3章 §1.4 | 方法推导 |
+| RF04 | [移动](structure.md#目录重设计)与[去重复](structure.md#去重复与抽象) | F03 摘要；W01 第3章 §1.4 | 方法推导 |
+| RF05 | [小步实施](../SKILL.md#s3-分步实施) | F01 小步变换与 frequent testing | 原文支持 |
+| RF06 | [回归选择](verification.md#验证顺序) | W01 第7章 §2.1.3；第5章 §2.2.5 | 方法推导 |
+| RF07 | [基线身份](compatibility.md#兼容账) | W01 第8章 §2.1–2.4、§2.6 | 方法推导 |
+| RF08 | [证据失效](recovery.md#工作区变化与证据失效) | W01 配置/测试关联为背景；返回状态为项目设计 | 项目机制 |
+| RF09 | [失败分类](recovery.md#检查失败)与[范围收缩](recovery.md#环境缺失与范围收缩) | 项目证据设计；W01 影响分析为背景 | 项目机制 |
+| RF10 | [检查预期](recovery.md#保护检查的观察)与[混合验收](../SKILL.md#s2-选定结构方案) | F01 行为保持；F04 Final Thoughts；失败保护为项目设计 | 方法推导 |
+| RF11 | [交付](verification.md#完成判断) | I03 摘要为质量目标背景；具体结论为项目设计 | 项目机制 |
+| RF12 | [中断恢复](recovery.md#中断恢复) | 项目状态设计；W01 配置身份为背景 | 项目机制 |
+| RF13 | [用户编辑/授权](recovery.md#工作区变化与证据失效) | 当前任务与项目权限约束 | 项目机制 |
+| RF14 | [制品观察](compatibility.md#观察细则)与[验证](verification.md#验证顺序) | W01 第8章 §2.6；平台细则为方法推导 | 方法推导 |
+| RF15 | [标准声明边界](basis.md#依据层级) | I01/I02 Abstract | 标准背景 |
 
 ## 使用与维护
 
-变更规则时核对对应 RF 行的来源是否仍支持它，再更新受影响的状态与案例。新增来源记录版本、可见原文定位与读取范围；新增验证保留原材料和实际结果。仅修改链接、表格或静态校验通过，只能证明映射可用，不证明新增行为或标准符合性。
-
-本表的静态关系校验、来源审查与限制见[追踪评测记录](../tests/evaluations/basis-traceability-2026-10-01.md)。
+变更规则先核对 RF 来源仍适用，再更新受影响状态与案例；新增来源注明版本、定位与读取范围，新增验证保留原材料和结果。静态关系核验使用[关系检查器](../../../tests/refactor-code/checks/verify_basis.py)，仅证明来源登记与当前规则指针完整。

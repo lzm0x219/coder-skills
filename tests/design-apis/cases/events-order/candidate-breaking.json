@@ -1,0 +1,9 @@
+{
+  "specversion": "1.0",
+  "id": "evt-44",
+  "source": "https://events.example.test/orders",
+  "type": "com.example.order.created.v1",
+  "datacontenttype": "application/json",
+  "dataschema": "https://schemas.example.test/events/order-created-v1.json",
+  "data": { "orderId": "44", "region": "us-east-1" }
+}

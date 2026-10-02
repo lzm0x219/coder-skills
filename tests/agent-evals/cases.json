@@ -1,0 +1,106 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Frozen raw tasks and acceptance contracts; withheld from executor agents",
+  "originalFixtures": {
+    "fix/jobs.py": "\"\"\"In-memory queue used by the notification worker.\"\"\"\nclass JobQueue:\n    def __init__(self):\n        self.pending = {}\n\n    def enqueue(self, key, payload, due):\n        self.pending[key] = {\"key\": key, \"payload\": payload, \"due\": due}\n\n    def drain(self, now, handler):\n        delivered = 0\n        for key, job in list(self.pending.items()):\n            if job[\"due\"] > now:\n                continue\n            del self.pending[key]\n            handler(job[\"payload\"])\n            delivered += 1\n        return delivered\n",
+    "fix/test_jobs.py": "import unittest\nfrom jobs import JobQueue\n\nclass QueueTests(unittest.TestCase):\n    def test_success(self):\n        q = JobQueue()\n        q.enqueue(\"a\", \"A\", 10)\n        seen = []\n        self.assertEqual(q.drain(10, seen.append), 1)\n        self.assertEqual(seen, [\"A\"])\n        self.assertEqual(q.pending, {})\n\n    def test_transient_failure_can_be_retried(self):\n        q = JobQueue()\n        q.enqueue(\"a\", \"A\", 10)\n        def unavailable(payload):\n            raise OSError(\"gateway offline\")\n        with self.assertRaises(OSError):\n            q.drain(10, unavailable)\n        self.assertIn(\"a\", q.pending)\n        seen = []\n        self.assertEqual(q.drain(10, seen.append), 1)\n        self.assertEqual(seen, [\"A\"])\n\nif __name__ == \"__main__\":\n    unittest.main()\n",
+    "fix/README.md": "# Notification queue\nPython 3 standard library. Run: `python3 -m unittest -v`.\nenqueue replaces the latest task under a key. drain processes a snapshot in insertion order.\nJobs with due <= now are eligible. The first handler error propagates and stops this drain.\nA failed task must be available for retry. A handler may enqueue a successor using the same key;\nsuccessful delivery removes the old task only, while the successor is for a later drain.\nFuture tasks must remain pending. Public entry points are JobQueue.enqueue and JobQueue.drain.\n",
+    "refactor/index.cjs": "'use strict';\nconst currencyLabel = '¥';\nfunction makeInvoice(lines, rate, record = () => {}) {\n  if (!Array.isArray(lines)) throw new TypeError('lines');\n  if (!Number.isFinite(rate) || rate < 0) throw new RangeError('rate');\n  let subtotal = 0;\n  for (const line of lines) {\n    if (!Number.isSafeInteger(line.priceCents) || line.priceCents < 0 ||\n        !Number.isSafeInteger(line.quantity) || line.quantity < 0) throw new RangeError('line');\n    subtotal += line.priceCents * line.quantity;\n  }\n  const totalCents = Math.round(subtotal * (1 + rate));\n  const label = currencyLabel + (totalCents / 100).toFixed(2);\n  record(label, totalCents);\n  return Object.freeze({ totalCents, label });\n}\nfunction createFeed() {\n  const listeners = new Set();\n  let closed = false;\n  return {\n    subscribe(fn) {\n      if (closed) throw new Error('closed');\n      listeners.add(fn);\n      return () => listeners.delete(fn);\n    },\n    publish(value) {\n      if (closed) return false;\n      const batch = [...listeners];\n      queueMicrotask(() => {\n        for (const fn of batch) if (listeners.has(fn)) fn(value);\n      });\n      return true;\n    },\n    close() { closed = true; listeners.clear(); }\n  };\n}\nmodule.exports = { makeInvoice, createFeed };\n",
+    "refactor/test.cjs": "const assert = require('node:assert/strict');\nconst {makeInvoice, createFeed} = require('./index.cjs');\n(async () => {\n  assert.equal(makeInvoice([{priceCents: 105, quantity: 2}], 0.1).totalCents, 231);\n  assert.throws(() => makeInvoice([], -1), RangeError);\n  const feed = createFeed(), seen = [];\n  const off = feed.subscribe(x => seen.push(x));\n  feed.publish('a'); off();\n  await new Promise(r => setImmediate(r));\n  assert.deepEqual(seen, []);\n  feed.close(); feed.close();\n  assert.equal(feed.publish('b'), false);\n  assert.throws(() => feed.subscribe(() => {}), /closed/);\n  console.log('PASS public consumer');\n})();\n",
+    "refactor/README.md": "# Billing and notifications\nNode.js commonjs, no external dependencies. Run `node test.cjs`.\nindex.cjs is the stable entry; makeInvoice and createFeed remain its only exports.\nmakeInvoice validates the lines container type before rate, then line values before recording.\nIt rounds the tax-inclusive total once, records exactly once, propagates record errors,\nand returns a frozen {totalCents,label}. Current currency label is a caller-visible value.\ncreateFeed queues delivery, preserves listener insertion order and checks cancellation at delivery.\nSubscribe-after-close throws; publish-after-close returns false; close is idempotent.\nA subscriber added after publish does not receive that publish.\n",
+    "refactor/customer-notes.txt": "用户原有内容：账单展示必须采用当前工作区的币种文案。此文件与本次结构改造无关。\n",
+    "review/README.md": "# Invoice service change\nReview the specified base-to-target commits. This checkout contains the whole source.\nSession identity is trusted middleware output. Invoices must remain isolated by tenant.\nCLI export is consumed as JSON Lines on stdout; diagnostics belong on stderr.\nAsset names are untrusted, but configured asset roots contain no symlinks and are not writable by callers.\nThe broker module wraps an external adapter. Deployment settings, provider contract and integration access are unavailable.\nThe change adds exports, updates asset resolution and exposes invoice reads.\n",
+    "review/src/invoices.cjs": "function readInvoice(db, session, id) {\n  const invoice = db.get(id);\n  if (!invoice || invoice.tenantId !== session.tenantId) return null;\n  return { id: invoice.id, amountCents: invoice.amountCents };\n}\nmodule.exports = { readInvoice };\n",
+    "review/src/assets.cjs": "const path = require('node:path');\nfunction resolveAsset(root, name) {\n  const base = path.resolve(root), target = path.resolve(base, name);\n  if (target !== base && !target.startsWith(base + path.sep)) throw new Error('outside root');\n  return target;\n}\nmodule.exports = { resolveAsset };\n",
+    "review/src/export.cjs": "function exportRows(rows, output, diagnostics) {\n  diagnostics.write('preparing export\\n');\n  for (const row of rows) output.write(JSON.stringify(row) + '\\n');\n}\nmodule.exports = { exportRows };\n",
+    "review/src/broker.cjs": "function deliver(adapter, message) {\n  return adapter.send(message);\n}\nmodule.exports = { deliver };\n",
+    "review/test.cjs": "const assert = require('node:assert/strict');\nconst { readInvoice } = require('./src/invoices.cjs');\nconst { resolveAsset } = require('./src/assets.cjs');\nconst { exportRows } = require('./src/export.cjs');\nconst db = new Map([['i1', { id: 'i1', tenantId: 't1', amountCents: 500 }]]);\nassert.equal(readInvoice(db, { tenantId: 't2' }, 'i1'), null);\nassert.throws(() => resolveAsset('/srv/assets', '../assets-private/secret'), /outside/);\nassert.equal(resolveAsset('/srv/assets', 'nested/../logo.png'), '/srv/assets/logo.png');\nconst out = [], diagnostics = [];\nexportRows([{ id: 1 }], { write: x => out.push(x) }, { write: x => diagnostics.push(x) });\nassert.deepEqual(out, ['{\"id\":1}\\n']);\nassert.deepEqual(diagnostics, ['preparing export\\n']);\nconsole.log('PASS current consumer');\n",
+    "api/REQUEST.md": "# Original request\n为一个新购物系统设计订单创建 API，暂不实现业务服务。\n客户端会重复点击，网络超时后也会重发；租户之间可能使用相同请求标记。\n仓库确认可能耗时 30 秒到 10 分钟，客户端要知道自己的订单最终成功、失败或仍在处理中。\n用户重试时不能多创建订单；如果改了商品却复用同一次下单标记，要有可解释结果。\n商品项包括 sku 和正整数 quantity。租户身份来自已经验证的 bearer token，不能由请求 body 自报。\n这是新接口，没有既有服务签名或旧客户端承诺；给出具体候选，不编造已部署事实。\n现有系统可做数据库事务及唯一约束，仓库是外部系统，不支持与订单数据库联合事务。\n只交付可评审契约及可检查的正常、失败和恢复调用示例。没有真实仓库、密钥或生产访问。\n工具有 Python3、Node、pnpm；可用临时本地依赖，不启动外部服务。\n",
+    "master/REQUESTS.json": "[\n  {\n    \"id\": \"M1\",\n    \"request\": \"审查这个分支是否有回归。里面也改了 OpenAPI 文件，但现有接口约定不准备重新设计。\"\n  },\n  {\n    \"id\": \"M2\",\n    \"request\": \"这个 PR 的公共 SDK 签名对调用者很别扭，请重新设计它的契约；这次先不检查实现正确性。\"\n  },\n  {\n    \"id\": \"M3\",\n    \"request\": \"保持现有行为，把同一个文件里的账单和通知职责拆开，重新安排目录。\"\n  },\n  {\n    \"id\": \"M4\",\n    \"request\": \"已有接口偶发超时，请仅定位原因，先不要修改代码。\"\n  },\n  {\n    \"id\": \"M5\",\n    \"request\": \"根据确定的需求新增一个按钮，用来切换页面背景色；请直接实现。\"\n  }\n]\n"
+  },
+  "worktreeInputs": {
+    "fix/jobs.py": "\"\"\"In-memory queue used by the notification worker.\"\"\"\nclass JobQueue:\n    def __init__(self):\n        self.pending = {}\n\n    def enqueue(self, key, payload, due):\n        self.pending[key] = {\"key\": key, \"payload\": payload, \"due\": due}\n\n    def drain(self, now, handler):\n        delivered = 0\n        for key, job in list(self.pending.items()):\n            if job[\"due\"] > now:\n                continue\n            del self.pending[key]\n            handler(job[\"payload\"])\n            delivered += 1\n        return delivered\n",
+    "fix/test_jobs.py": "import unittest\nfrom jobs import JobQueue\n\nclass QueueTests(unittest.TestCase):\n    def test_success(self):\n        q = JobQueue()\n        q.enqueue(\"a\", \"A\", 10)\n        seen = []\n        self.assertEqual(q.drain(10, seen.append), 1)\n        self.assertEqual(seen, [\"A\"])\n        self.assertEqual(q.pending, {})\n\n    def test_transient_failure_can_be_retried(self):\n        q = JobQueue()\n        q.enqueue(\"a\", \"A\", 10)\n        def unavailable(payload):\n            raise OSError(\"gateway offline\")\n        with self.assertRaises(OSError):\n            q.drain(10, unavailable)\n        self.assertIn(\"a\", q.pending)\n        seen = []\n        self.assertEqual(q.drain(10, seen.append), 1)\n        self.assertEqual(seen, [\"A\"])\n\nif __name__ == \"__main__\":\n    unittest.main()\n",
+    "fix/README.md": "# Notification queue\nPython 3 standard library. Run: `python3 -m unittest -v`.\nenqueue replaces the latest task under a key. drain processes a snapshot in insertion order.\nJobs with due <= now are eligible. The first handler error propagates and stops this drain.\nA failed task must be available for retry. A handler may enqueue a successor using the same key;\nsuccessful delivery removes the old task only, while the successor is for a later drain.\nFuture tasks must remain pending. Public entry points are JobQueue.enqueue and JobQueue.drain.\n",
+    "refactor/index.cjs": "'use strict';\nconst currencyLabel = 'CNY ';\nfunction makeInvoice(lines, rate, record = () => {}) {\n  if (!Array.isArray(lines)) throw new TypeError('lines');\n  if (!Number.isFinite(rate) || rate < 0) throw new RangeError('rate');\n  let subtotal = 0;\n  for (const line of lines) {\n    if (!Number.isSafeInteger(line.priceCents) || line.priceCents < 0 ||\n        !Number.isSafeInteger(line.quantity) || line.quantity < 0) throw new RangeError('line');\n    subtotal += line.priceCents * line.quantity;\n  }\n  const totalCents = Math.round(subtotal * (1 + rate));\n  const label = currencyLabel + (totalCents / 100).toFixed(2);\n  record(label, totalCents);\n  return Object.freeze({ totalCents, label });\n}\nfunction createFeed() {\n  const listeners = new Set();\n  let closed = false;\n  return {\n    subscribe(fn) {\n      if (closed) throw new Error('closed');\n      listeners.add(fn);\n      return () => listeners.delete(fn);\n    },\n    publish(value) {\n      if (closed) return false;\n      const batch = [...listeners];\n      queueMicrotask(() => {\n        for (const fn of batch) if (listeners.has(fn)) fn(value);\n      });\n      return true;\n    },\n    close() { closed = true; listeners.clear(); }\n  };\n}\nmodule.exports = { makeInvoice, createFeed };\n",
+    "refactor/test.cjs": "const assert = require('node:assert/strict');\nconst {makeInvoice, createFeed} = require('./index.cjs');\n(async () => {\n  assert.equal(makeInvoice([{priceCents: 105, quantity: 2}], 0.1).totalCents, 231);\n  assert.throws(() => makeInvoice([], -1), RangeError);\n  const feed = createFeed(), seen = [];\n  const off = feed.subscribe(x => seen.push(x));\n  feed.publish('a'); off();\n  await new Promise(r => setImmediate(r));\n  assert.deepEqual(seen, []);\n  feed.close(); feed.close();\n  assert.equal(feed.publish('b'), false);\n  assert.throws(() => feed.subscribe(() => {}), /closed/);\n  console.log('PASS public consumer');\n})();\n",
+    "refactor/README.md": "# Billing and notifications\nNode.js commonjs, no external dependencies. Run `node test.cjs`.\nindex.cjs is the stable entry; makeInvoice and createFeed remain its only exports.\nmakeInvoice validates the lines container type before rate, then line values before recording.\nIt rounds the tax-inclusive total once, records exactly once, propagates record errors,\nand returns a frozen {totalCents,label}. Current currency label is a caller-visible value.\ncreateFeed queues delivery, preserves listener insertion order and checks cancellation at delivery.\nSubscribe-after-close throws; publish-after-close returns false; close is idempotent.\nA subscriber added after publish does not receive that publish.\n",
+    "refactor/customer-notes.txt": "用户原有内容：账单展示必须采用当前工作区的币种文案。此文件与本次结构改造无关。\n",
+    "review/README.md": "# Invoice service change\nReview the specified base-to-target commits. This checkout contains the whole source.\nSession identity is trusted middleware output. Invoices must remain isolated by tenant.\nCLI export is consumed as JSON Lines on stdout; diagnostics belong on stderr.\nAsset names are untrusted, but configured asset roots contain no symlinks and are not writable by callers.\nThe broker module wraps an external adapter. Deployment settings, provider contract and integration access are unavailable.\nThe change adds exports, updates asset resolution and exposes invoice reads.\n",
+    "review/src/invoices.cjs": "function readInvoice(db, session, id) {\n  const invoice = db.get(id);\n  if (!invoice) return null;\n  return { id: invoice.id, amountCents: invoice.amountCents };\n}\nmodule.exports = { readInvoice };\n",
+    "review/src/assets.cjs": "const path = require('node:path');\nfunction resolveAsset(root, name) {\n  const base = path.resolve(root), target = path.resolve(base, name);\n  const relative = path.relative(base, target);\n  if (relative === '..' || relative.startsWith('..' + path.sep) || path.isAbsolute(relative)) throw new Error('outside root');\n  return target;\n}\nmodule.exports = { resolveAsset };\n",
+    "review/src/export.cjs": "function exportRows(rows, output, diagnostics) {\n  output.write('preparing export\\n');\n  for (const row of rows) output.write(JSON.stringify(row) + '\\n');\n}\nmodule.exports = { exportRows };\n",
+    "review/src/broker.cjs": "function deliver(adapter, message) {\n  return adapter.send(message);\n}\nmodule.exports = { deliver };\n",
+    "review/test.cjs": "const assert = require('node:assert/strict');\nconst { readInvoice } = require('./src/invoices.cjs');\nconst { resolveAsset } = require('./src/assets.cjs');\nconst { exportRows } = require('./src/export.cjs');\nconst db = new Map([['i1', { id: 'i1', tenantId: 't1', amountCents: 500 }]]);\nassert.equal(readInvoice(db, { tenantId: 't2' }, 'i1'), null);\nassert.throws(() => resolveAsset('/srv/assets', '../assets-private/secret'), /outside/);\nassert.equal(resolveAsset('/srv/assets', 'nested/../logo.png'), '/srv/assets/logo.png');\nconst out = [], diagnostics = [];\nexportRows([{ id: 1 }], { write: x => out.push(x) }, { write: x => diagnostics.push(x) });\nassert.deepEqual(out, ['{\"id\":1}\\n']);\nassert.deepEqual(diagnostics, ['preparing export\\n']);\nconsole.log('PASS current consumer');\n",
+    "api/REQUEST.md": "# Original request\n为一个新购物系统设计订单创建 API，暂不实现业务服务。\n客户端会重复点击，网络超时后也会重发；租户之间可能使用相同请求标记。\n仓库确认可能耗时 30 秒到 10 分钟，客户端要知道自己的订单最终成功、失败或仍在处理中。\n用户重试时不能多创建订单；如果改了商品却复用同一次下单标记，要有可解释结果。\n商品项包括 sku 和正整数 quantity。租户身份来自已经验证的 bearer token，不能由请求 body 自报。\n这是新接口，没有既有服务签名或旧客户端承诺；给出具体候选，不编造已部署事实。\n现有系统可做数据库事务及唯一约束，仓库是外部系统，不支持与订单数据库联合事务。\n只交付可评审契约及可检查的正常、失败和恢复调用示例。没有真实仓库、密钥或生产访问。\n工具有 Python3、Node、pnpm；可用临时本地依赖，不启动外部服务。\n",
+    "master/REQUESTS.json": "[\n  {\n    \"id\": \"M1\",\n    \"request\": \"审查这个分支是否有回归。里面也改了 OpenAPI 文件，但现有接口约定不准备重新设计。\"\n  },\n  {\n    \"id\": \"M2\",\n    \"request\": \"这个 PR 的公共 SDK 签名对调用者很别扭，请重新设计它的契约；这次先不检查实现正确性。\"\n  },\n  {\n    \"id\": \"M3\",\n    \"request\": \"保持现有行为，把同一个文件里的账单和通知职责拆开，重新安排目录。\"\n  },\n  {\n    \"id\": \"M4\",\n    \"request\": \"已有接口偶发超时，请仅定位原因，先不要修改代码。\"\n  },\n  {\n    \"id\": \"M5\",\n    \"request\": \"根据确定的需求新增一个按钮，用来切换页面背景色；请直接实现。\"\n  }\n]\n"
+  },
+  "gold": {
+    "master": {
+      "routes": {
+        "M1": "review-changes",
+        "M2": "design-apis",
+        "M3": "refactor-code",
+        "M4": "fix-bugs",
+        "M5": "fallback"
+      },
+      "M4": "readonly diagnosis"
+    },
+    "fix": [
+      "original symptom old fail/new pass",
+      "exception propagated and stops snapshot",
+      "failure task retained for retry",
+      "success callback same-key successor retained",
+      "future tasks/order/deadline boundary preserved",
+      "no deletion of unrelated user material",
+      "root cause and original verification truthful"
+    ],
+    "refactor": [
+      "exact public export shape",
+      "current dirty currency CNY preserved",
+      "input error precedence and record ordering unchanged",
+      "frozen result and callback errors unchanged",
+      "async snapshot order and cancellation-before-delivery unchanged",
+      "close behavior unchanged",
+      "responsibility split with reason, not arbitrary line extraction",
+      "customer notes bytes preserved"
+    ],
+    "review": {
+      "confirmed": [
+        "src/invoices.cjs tenant isolation removed",
+        "src/export.cjs diagnostic now written to stdout"
+      ],
+      "protected": "assets.cjs relative containment correctly rejects ../assets-private but permits normalized internal path; no symlinks in model",
+      "unknown": "broker delivery/retry/atomicity cannot be proven without adapter/provider/config; no fabricated deployed defect",
+      "scope": "BASE..TARGET read-only source, causal findings with current file lines"
+    },
+    "api": [
+      "machine-readable real contract parses",
+      "identity from auth with tenant scoped durable request dedup",
+      "same intent replay stable; same marker changed payload conflict contract",
+      "asynchronous identity/status with success/failure result and client recovery",
+      "external warehouse effects and timeout uncertainty/reconciliation explicitly addressed",
+      "normal and key refusal/recovery consumer checks actually run",
+      "schema enforces required sku/positive quantity and status-result correspondence where chosen carrier expresses it",
+      "reject paths/tenant boundaries cannot be claimed runtime verified from schema",
+      "candidate versus current facts, format/semantics/runtime/project acceptance correctly separated"
+    ]
+  },
+  "baselineCommands": [
+    {
+      "name": "fix red",
+      "exitCode": 1,
+      "stdout": "test_success (test_jobs.QueueTests.test_success) ... ok\ntest_transient_failure_can_be_retried (test_jobs.QueueTests.test_transient_failure_can_be_retried) ... FAIL\n\n======================================================================\nFAIL: test_transient_failure_can_be_retried (test_jobs.QueueTests.test_transient_failure_can_be_retried)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/private/tmp/coder-skills-agent-eval.4U5lv9/fix/test_jobs.py\", line 20, in test_transient_failure_can_be_retried\n    self.assertIn(\"a\", q.pending)\n    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^\nAssertionError: 'a' not found in {}\n\n----------------------------------------------------------------------\nRan 2 tests in 0.001s\n\nFAILED (failures=1)\n"
+    },
+    {
+      "name": "refactor baseline",
+      "exitCode": 0,
+      "stdout": "PASS public consumer\n"
+    },
+    {
+      "name": "review candidate red",
+      "exitCode": 1,
+      "stdout": "node:internal/assert/utils:146\n  throw error;\n  ^\n\nAssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n+ actual - expected\n\n+ {\n+   amountCents: 500,\n+   id: 'i1'\n+ }\n- null\n\n    at Object.<anonymous> (/private/tmp/coder-skills-agent-eval.4U5lv9/review/test.cjs:6:8)\n    at Module._compile (node:internal/modules/cjs/loader:1934:14)\n    at Object..js (node:internal/modules/cjs/loader:2074:10)\n    at Module.load (node:internal/modules/cjs/loader:1656:32)\n    at Module._load (node:internal/modules/cjs/loader:1448:12)\n    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)\n    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)\n    at node:internal/main/run_main_module:33:47 {\n  generatedMessage: true,\n  code: 'ERR_ASSERTION',\n  actual: { id: 'i1', amountCents: 500 },\n  expected: null,\n  operator: 'strictEqual',\n  diff: 'simple'\n}\n\nNode.js v26.7.0\n"
+    }
+  ]
+}

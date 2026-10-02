@@ -1,0 +1,24 @@
+{
+  "create": {
+    "method": "POST", "path": "/exports", "headers": { "Idempotency-Key": "export-0001", "Content-Type": "application/json" },
+    "body": { "profileId": "p-42", "format": "csv" },
+    "expected": { "status": 202, "headers": { "Location": "/exports/op-1", "Retry-After": "3" }, "body": { "id": "op-1", "state": "accepted" } }
+  },
+  "sameKeySameRequestRetry": {
+    "method": "POST", "path": "/exports", "headers": { "Idempotency-Key": "export-0001", "Content-Type": "application/json" },
+    "body": { "profileId": "p-42", "format": "csv" }, "expected": "same operation identity and stable response according to service policy"
+  },
+  "sameKeyDifferentRequest": {
+    "method": "POST", "path": "/exports", "headers": { "Idempotency-Key": "export-0001", "Content-Type": "application/json" },
+    "body": { "profileId": "p-99", "format": "json" },
+    "expected": { "status": 409, "body": { "type": "https://api.example.test/problems/idempotency-key-reused", "title": "Idempotency key reused", "status": 409 } }
+  },
+  "pollAccepted": { "method": "GET", "path": "/exports/op-1", "expected": { "status": 200, "body": { "id": "op-1", "state": "running" } } },
+  "pollSucceeded": { "method": "GET", "path": "/exports/op-1", "expected": { "status": 200, "body": { "id": "op-1", "state": "succeeded", "result": { "downloadUrl": "https://download.example.test/file/1", "expiresAt": "2026-10-02T00:00:00Z" } } } },
+  "pollFailed": { "method": "GET", "path": "/exports/op-1", "expected": { "status": 200, "body": { "id": "op-1", "state": "failed", "error": { "type": "https://api.example.test/problems/source-unavailable", "title": "Source unavailable", "status": 503 } } } },
+  "pageOne": { "method": "GET", "path": "/profiles?page_size=2&status=active", "expected": { "status": 200, "body": { "profiles": [{ "id": "p-1", "status": "active" }, { "id": "p-2", "status": "active" }], "next_page_token": "opaque-a" } } },
+  "emptyIntermediatePage": { "method": "GET", "path": "/profiles?page_size=2&status=active&page_token=opaque-a", "expected": { "status": 200, "body": { "profiles": [], "next_page_token": "opaque-b" } } },
+  "pageAfterEmpty": { "method": "GET", "path": "/profiles?page_size=2&status=active&page_token=opaque-b", "expected": { "status": 200, "body": { "profiles": [{ "id": "p-7", "status": "active" }], "next_page_token": "" } } },
+  "filterChangedWithToken": { "method": "GET", "path": "/profiles?page_size=2&status=archived&page_token=opaque-a", "expected": { "status": 400, "body": { "type": "https://api.example.test/problems/page-token-filter-mismatch", "title": "Page token does not match filters", "status": 400 } } },
+  "invalidPageSize": { "method": "GET", "path": "/profiles?page_size=101&status=active", "expected": { "status": 400, "body": { "type": "https://api.example.test/problems/invalid-page-size", "title": "Invalid page size", "status": 400 } } }
+}

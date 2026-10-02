@@ -1,0 +1,19 @@
+# Webhook subscription 与 endpoint lifecycle
+
+本页扩充 [WH01、WH09–WH11](../webhooks.md)，适用于产品允许创建/管理 webhook subscription。仅接收固定 provider callback 而无自有订阅 API 时，记录 provider 管理面并注明自有端“不适用”。身份认证、租户/对象授权和敏感数据统一引用 [shared security](../common/security.md)。
+
+| ID | 条件、强度 | 具体规则、失败/恢复和可复核证据 | 来源 |
+|---|---|---|---|
+| WL01 | 创建/更新 subscription。**Skill MUST** | 按 shared security 校验 subscriber principal 对 tenant+subscription 的 ownership；本 webhook 分支另交 event filter/scope、active/paused/failed/suspended/deleted 状态、URL challenge、secret 一次性呈现/轮换/删除生命周期。随机 ID 不等于授权。给状态转换表和跨租户负例。 | [OWASP API1 BOLA](https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/)；项目 auth profile。 |
+| WL02 | 用户提交 destination URL。**Security MUST（设计门槛）** | 与 shared security 的 URL-fetch controls 对齐，并将 webhook 发送作为 SSRF sink 专项检查：parser 规范化后只允许 profile 的 scheme/port；默认只 HTTPS；拒绝 credentials、loopback/private/link-local/multicast/reserved IP、metadata endpoints、zone IDs 与 IPv4 表达绕过。解析 A/AAAA 后验证全部候选地址，连接 pin 到已验证 IP 并校验证书/SNI；DNS refresh 要重复验证。禁自动 redirect，或每一 hop 重新执行所有验证。 | [OWASP API7:2023](https://api-security.owasp.org/editions/2023/en/0xa7-server-side-request-forgery/)、[OWASP SSRF Prevention](https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html) |
+| WL03 | endpoint ownership 可被攻击者注册。**Skill MUST** | 验证域控制（挑战 URL/token 或 DNS challenge）后才发送用户数据；challenge token 一次性、短期、绑定 tenant+订阅，完成后从 delivery payload 中移除。注册更新、DNS 变更、redirect、暂停恢复需重新校验；挑战取址同样经过 SSRF 防线。 | 设计门槛；provider control-plane profile。 |
+| WL04 | subscription 变更或解除。**Skill MUST** | 说明并发 update 的 ETag/version/compare-and-set、事件筛选语义变更何时生效、已入队事件按旧/新配置发送的切点、删除后 in-flight attempts、secret 撤销立即/传播窗口。幂等重复 DELETE 与旧版本 update 必须有明确状态码/冲突响应；scope 与审计 actor 一并保留。 | HTTP 条件请求见 [RFC 9110 §13](https://www.rfc-editor.org/rfc/rfc9110.html#section-13)；自有合同。 |
+| WL05 | 多 endpoint/provider。**Skill MUST** | 每个 subscription 独立 delivery queue、credential/key、rate/concurrency budget 和 failure state；一个慢/故障 endpoint 不阻塞其他租户。停用策略要区分单 event permanent rejection、全 endpoint 反复不可用、配置/安全错误；恢复需重新探测/重激活而非悄悄继续。 | 实现架构门槛；队列/限速值从 SLO 声明。 |
+| WL06 | 事件类型/动作演进。**Skill MUST** | 提供可发现的 event catalog（type、说明、版本、action、最小字段、可空性、是否 snapshot、敏感级别）；新增 event/action 后 receiver 对 unknown type/action 拒绝副作用并安全 ACK/parking 规则要明确。订阅 filtering 的 AND/OR、glob 和 action 范围要表达无歧义。 | GitHub 明确建议检查 event type 与 action 且会增加新值：[best practices](https://docs.github.com/en/webhooks/using-webhooks/best-practices-for-using-webhooks)。 |
+| WL07 | 重试/手动 redelivery。**Skill MUST** | 事件 ID 在手动 redelivery 中是否相同、是否生成新 delivery ID / attempt ID、原始 created time 与本次 attempt time、签名 timestamp 更新规则、顺序保证及重试是否仍受当前 subscription filter，逐项写明。显示 attempt history 和当前终态，不把重新请求 API 的 202 当投递成功。 | GitHub redelivery 保留 `X-GitHub-Delivery`：[best practices](https://docs.github.com/en/webhooks/using-webhooks/best-practices-for-using-webhooks)、[redelivering](https://docs.github.com/en/webhooks/testing-and-troubleshooting-webhooks/redelivering-webhooks)。 |
+| WL08 | delivery receipts / query API。**Skill MUST** | 若提供者承诺 receipts，定义稳定 delivery ID、attempt ID/number、queued/sending/retry-scheduled/succeeded/terminal/expired/parked 状态，状态时间戳、最后结果脱敏、cursor pagination consistency、排序键和 retention；查询授权限制至拥有 subscription。status poll 不重放；显式 retry endpoint 的权限、幂等和限流另定义。 | 自有控制面合同。 |
+| WL09 | endpoint 暂停/永久失败/删除。**Skill MUST** | 给出状态机和恢复入口：pause 保留还是清空队列、永不过期 payload 如何处理、删除是否删除待发送事件/secret/receipt 以及审计是否保留，超出 retention 后恢复数据来源。对 410/认证失败等信号采用何种政策以 profile 说明，不跨 vendor 套常数。 | 各 vendor 行为见 [profiles.md](profiles.md)；数据保留组织政策。 |
+
+## API surface 最小集合（按需求选择）
+
+提交可审查的 OpenAPI/operation contract：创建/列出/获取/更新/暂停或恢复/删除 subscription，验证 endpoint，查询 deliveries/attempts，手动 redeliver。每个 operation 的 tenant scope、认证/授权、幂等、分页/过滤、冲突/不存在/过期状态、并发更新、审计敏感字段必须明确。若不提供某 operation，标明由哪个可信管理入口替代和职责人。

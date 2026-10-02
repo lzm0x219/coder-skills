@@ -1,0 +1,9 @@
+{
+  "success": { "method": "PUT", "path": "/profiles/42", "headers": { "Authorization": "Bearer <token>", "If-Match": "\"v7\"", "Content-Type": "application/json" }, "body": { "displayName": "Ming" }, "expectedStatus": 204 },
+  "staleVersion": { "method": "PUT", "path": "/profiles/42", "headers": { "Authorization": "Bearer <token>", "If-Match": "\"v6\"", "Content-Type": "application/json" }, "body": { "displayName": "Ming" }, "expectedStatus": 412 },
+  "missingPrecondition": { "method": "PUT", "path": "/profiles/42", "headers": { "Authorization": "Bearer <token>", "Content-Type": "application/json" }, "body": { "displayName": "Ming" }, "expectedStatus": 400 },
+  "invalidBody": { "method": "PUT", "path": "/profiles/42", "headers": { "Authorization": "Bearer <token>", "If-Match": "\"v7\"", "Content-Type": "application/json" }, "body": { "displayName": "" }, "expectedStatus": 400 },
+  "unauthorizedAndStale": { "method": "PUT", "path": "/profiles/42", "headers": { "If-Match": "\"v6\"", "Content-Type": "application/json" }, "body": { "displayName": "Ming" }, "expectedStatus": 401, "expectedHeaders": { "WWW-Authenticate": "Bearer realm=\"profiles\"" }, "problem": { "type": "https://api.example.test/problems/authentication-required", "title": "Authentication required", "status": 401 } },
+  "authenticatedButForbidden": { "method": "PUT", "path": "/profiles/42", "headers": { "Authorization": "Bearer <read-only-token>", "If-Match": "\"v6\"", "Content-Type": "application/json" }, "body": { "displayName": "Ming" }, "expectedStatus": 403 },
+  "invalidBodyProblem": { "method": "PUT", "path": "/profiles/42", "headers": { "Authorization": "Bearer <token>", "If-Match": "\"v7\"", "Content-Type": "application/json" }, "body": { "displayName": "" }, "expectedStatus": 400, "problem": { "type": "https://api.example.test/problems/invalid-profile", "title": "Invalid profile", "status": 400, "detail": "displayName must contain 1 to 80 characters" } }
+}

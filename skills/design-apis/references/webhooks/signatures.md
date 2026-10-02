@@ -1,0 +1,18 @@
+# Webhook authentication, signatures and replay
+
+本页细化 [WH02–WH06、WH09](../webhooks.md)。协议格式不能脱离双方采用的 signature profile；身份认证、完整性、时效、授权、幂等是不同检查。
+
+| ID | 适用条件、强度 | 规则及恢复 | 权威来源 |
+|---|---|---|---|
+| WG01 | 任意 webhook 验签。**Skill MUST** | 填完整 profile：signing algorithm / parameters、encoding/canonicalization、精确 covered bytes/components、签名头语法、多签名 label/版本、key ID 与受信来源、key strength/rotation/revoke、timestamp/nonce freshness、失败状态。逐个输入画出 proxy/body parsing 前后形态。 | 签名 API profile；算法取 NIST/IETF 标准及成熟 crypto library。 |
+| WG02 | 签 JSON payload。**Profile MUST** | 以接收到的 raw representation bytes 验证。不得先 JSON parse 后 stringify 再验签；若 HTTP content decoding 影响表示字节，明确 signer/hash 作用于哪一层并禁止中间件变换。限 body size 后再缓存 raw bytes。 | GitHub [validation](https://docs.github.com/en/webhooks/using-webhooks/validating-webhook-deliveries)、Stripe [signature verification](https://docs.stripe.com/webhooks/signature)。 |
+| WG03 | 采用 RFC 9421。**协议 MUST** | HTTP Message Signature profile 要列出 required covered components/parameters/algorithm/key discovery/trust/time/audience/nonce。要保护 body 时用 RFC 9530 Content-Digest 或 profile-defined digest，并将 digest field 纳入 signature covered components；只带一个未签 digest 不能认证 body。还需覆盖影响授权/路由的 method、target authority/path 和 relevant content headers，避免 unsigned component substitution。 | [RFC 9421 §1.4、§2、§7.2](https://www.rfc-editor.org/rfc/rfc9421.html)、[RFC 9530 §2–3](https://www.rfc-editor.org/rfc/rfc9530.html)。 |
+| WG04 | HMAC profile。**Skill MUST** | secret 通过安全通道 provisioning、按 tenant/endpoint 隔离、足够熵且不进 URL/log/source；两端计算 exact byte input + canonical prefix/encoding；恒定时间比较，长度不匹配先安全拒绝。统一失败响应但内部记分类原因，避免签名 oracle。 | [GitHub validation](https://docs.github.com/en/webhooks/using-webhooks/validating-webhook-deliveries)、[Standard Webhooks](https://github.com/standard-webhooks/standard-webhooks/blob/v1.0.0/spec/standard-webhooks.md)。 |
+| WG05 | 时间签名/防重放。**Skill MUST** | 校验严格 timestamp 数值/单位及 profile-defined ± tolerance；防未来/陈旧值；加入已认证 stable event ID 的持久 inbox unique constraint。timestamp 边界、时钟 skew、provider redelivery timestamp 更新行为逐一测试。timestamp freshness 不提供一次性消费保证；timestamp 在窗口内仍可重放。 | Standard Webhooks §Security；[RFC 9421 §7.2](https://www.rfc-editor.org/rfc/rfc9421.html#section-7.2)。 |
+| WG06 | 非对称 key / key ID。**Skill MUST** | key ID/kid 只选择预配置可信 keyset；禁止 fetch payload 指向的 `jku`/URL 或临时相信未经验证的证书。定义 key usage/algorithm allowlist、有效期/撤销、重叠期、unknown/retired key response 和轮换回滚。 | [RFC 9421 §7](https://www.rfc-editor.org/rfc/rfc9421.html#section-7)。 |
+| WG07 | 轮换/泄露。**Skill MUST** | 预先支持 overlap（sender 同时签 current+previous 或 receiver 在可信 keyring 验多个 key）；写 start/end instant 和回滚/立即 revoke；不同 key 的 key ID/版本必须避免误将 untrusted key 成功。泄露后重放旧签名仍需 timestamp/dedup defense。 | [Standard Webhooks signature scheme](https://github.com/standard-webhooks/standard-webhooks/blob/v1.0.0/spec/standard-webhooks.md#signature-scheme)。 |
+| WG08 | 跨 vendor interop。**Skill MUST** | 每 vendor 单独 verifier adapter + header profile + pinned published vector。GitHub body-only signature 不覆盖 delivery/event headers；不得把这些 headers 当 cryptographically authenticated。需要绑定时自行定义签入 payload/RFC9421 components，或单独可靠映射可信 delivery metadata。 | [GitHub validation](https://docs.github.com/en/webhooks/using-webhooks/validating-webhook-deliveries)。 |
+
+## 测试向量矩阵
+
+每个 profile 至少通过：已知有效向量；原 body 只改一个 byte/空格/UTF-8 字节；缺失/重复/大小写冲突 header；错误 prefix/version/encoding；篡改每个 covered component 与每个未 covered identity/routing component；未知 key/算法 downgrade；当前+上一密钥 overlap 后旧 key revoke；timestamp 刚好窗口边界、边界外一秒、未来、溢出/负数/非数字；相同 event ID 跨 timestamp 重投；并发重复。单元向量证明 signer/verifier 对固定字节 profile 一致，不证明代理保留 bytes、key manager 安全、DB 去重原子或生产 key rollout。

@@ -1,0 +1,186 @@
+{
+  "all-types-report.md": {
+    "text": "# review-changes 全软件类型行为评测\n\n日期：2026-10-01。评测对象：本仓库 `skills/review-changes/SKILL.md` 当前版本及其被路由到的资料。此评测由同一代理构造场景并审查，**不是盲测**，也不是外部 PR 基准。预期假设先冻结在 `expected-before-review.md`；不因观察结果改写假设或案例。\n\n## 可复放材料与评测边界\n\n- 预期冻结记录：`/tmp/review-changes-eval/all-types/expected-before-review.md`\n- 七类隔离 Git 仓库（baseline 与 target commit）：`/tmp/review-changes-eval/all-types/repos-v2/`\n- 从固定提交导出的完整基线/目标源快照及 SHA-256 清单：`/tmp/review-changes-eval/all-types/source-v2/`\n- 精确差异补丁：同目录 `<type>-diff.patch`；版本、tree ID、变更路径见 `VERSIONS.tsv`。\n- 运行副本（编译产物与快照分离）：`/tmp/review-changes-eval/all-types/run-v2/`\n- 主仓真实差异快照：`/tmp/review-changes-eval/all-types/local-project/`\n- 旧报告、v1 夹具及本报告之外文件均保留；本报告的代码判断只基于 v2 固定提交。\n\n每个隔离仓库均以 `HEAD~1` 为基线、`HEAD` 为目标；两端点来自实际 `git rev-parse`。每仓仅一个受审变更路径；未变更的 `SPEC.txt` 是需求来源，随两端快照保存。S0 路径及 tree 指纹记录在 `source-v2/VERSIONS.tsv`，全部源文件 SHA-256 在 `source-v2/SHA256SUMS.tsv`。评测运行目录与源仓分离，Python 使用 `-B`/`PYTHONDONTWRITEBYTECODE=1`，Swift/C 可执行文件写在 `run-v2`。\n\n## 实际使用的 review-changes 方法\n\n读取入口、`references/scope.md`、`routing.md`、`evidence-and-report.md`；实际受影响类型资料：`profiles/web.md`、`services.md`、`tools.md`、`apps.md`、`data-ai.md`、`embedded.md`、`noncode.md`。按实际改动读取/应用：`checks/behavior.md`、`contracts.md`、`semantics.md`、`async.md`、`delivery.md`、`state.md`、`reliability.md`、`trust.md`、`ui.md`、`resources.md`、`structure.md`、`supply-chain.md`、`observability.md`。对没有实际触发变化的细则不登记为已核验。规范语义来自每个隔离仓的 SPEC；没有规格时不自行补造。服务生命周期、iOS 生命周期与嵌入式目标时序均按 F3 保留平台限制。\n\n状态约定：**问题**=证据确认变化违反适用契约；**反证**=疑点在真实调用条件下不成立；**未验证**=必要运行环境或契约信息不足；**不适用**=当前对象不触发。三轴为需求/契约、正确性、规范。每项均明确未证实内容。\n\n## 七类场景观察\n\n### WEB — GET query 零值边界\n\n审查请求：“请审查 `/items?limit=0` 的默认值变化是否回归，按显式契约核对。”\n\n- S0：baseline `8d9f2df0d993fd801d3b81c266f62f4c178aecaa` → target `488afa769253c677045420cb13960e338316f116`；变更 `app.py:3`。需求来源 `SPEC.txt`：`limit >= 0`，显式 0 返回空列表，省略才默认 20。\n- S1：query parser 返回字符串，WSGI GET 请求把 `QUERY_STRING` 交给 `list_items`。目标把 `raw is None` 改成 `raw or 20`。\n- 路由/规则：Web W1；边界 B1；实际入口 WSGI。\n- 执行：在基线和目标快照分别运行 `python3 -B -c 'from app import app; env={\"QUERY_STRING\":\"limit=0\",\"REQUEST_METHOD\":\"GET\"}; start={}; out=app(env, lambda s,h:start.update(status=s,headers=h)); print(start, out)'`。显式零两者均为 `200 OK` 与 `[b'[]']`；另对省略参数运行同一 WSGI 入口，两端都返回默认 20 行。目标处理时 parser 中显式零是字符串 `'0'`，属于 truthy，因此这次 diff 没改变显式零路径。省略参数的实际观察也与契约默认值一致；不把空字符串 `limit=` 擅自解释为缺失值，因为 SPEC 没定义该输入。\n- 实际发现/反证：**反证**。冻结预期猜测零可能被真假值判断改坏，但真实 HTTP/query 调用值是字符串 `'0'`，可运行观察证明目标仍返回空列表。不能把内部假设 `raw` 是整数套到实际入口。\n- 轴：需求/契约已核验符合；正确性已核验该边界无回归；规范无额外规范被触发。\n- 限制：此结论只覆盖该 query 入口及 limit=0/本例，不证明其他查询参数或生产代理链。\n\n### SERVICE / IaC — launchd KeepAlive 配置\n\n审查请求：“审查 launchd 配置这次 KeepAlive 变化是否违反已声明运行约束。”\n\n- S0：`068067e021444b1d5934fb80f7e102ec4d2372a7` → `7420fd853ad8cbaabc7d831c8b6638761ffa7cc3`；变更 `job.plist`，只改 `job.plist:1` 中 `KeepAlive=false` 为 `true`。`SPEC.txt` 明确未承诺生命周期策略；实际消费者为 macOS launchd。\n- S1/S2：服务类型 `services.md`；I2 声明配置与实际资源，L2 配置来源/环境仅在需要评价配置入口时适用。候选疑点“plist 语法坏了”被解析器反证；运行时 restart policy 没有足够契约判断好坏。\n- 执行：基线、目标分别 `plutil -lint job.plist`，均为 `job.plist: OK`。宿主有 `/bin/launchctl`，但本评测没有加载/启动 job，也没有声称验证 launchd 实际运行。\n- 实际发现/反证：语法错误疑点被反证；`KeepAlive` 行为是否符合产品策略 **未验证/语义未定**，因为规格明确不承诺策略，且未做 launchd 生命周期执行。不得把“没有规格”说成正确或等价。\n- 轴：需求/契约未定；正确性（真实 launchd 生命周期）未验证；plist 格式校验已核验；无标准违规证据。\n- 最小后续：要判断策略是否正确，需先取得 job 生命周期承诺；若需核实 launchd 运行，再在获准隔离的测试域加载，不能用 lint 代替。\n\n### LIB / CLI — 不可达的内部边界变化\n\n审查请求：“审查 CLI `--size` 校验变化，判断目标是否改变调用者可见行为。”\n\n- S0：`f4bc0ab21c382836c9af25515063e8e619f1e108` → `c47aa6dbba65ebca7b39835ac157554b4b8a3c07`；变更 `cli.py:7`，内部 `page_size` 从拒绝 `<=0` 改为拒绝 `<0`。契约 `SPEC.txt`：CLI 只接受正整数，零必须以非零状态拒绝。\n- S1/S2：库与工具 `tools.md`；K1 CLI 子进程契约、B2 数值边界。真实入口先经过 argparse `positive()`，`0` 在进入 `page_size()` 前被拒绝。\n- 执行：基线与目标 `python3 -B cli.py --size 0` 均 exit 2，输出 `argument --size: must be positive`；基线与目标 `python3 -B cli.py --size 2` 均 stdout `2`、exit 0。子进程独立运行，未直接调用内部 helper 冒充 CLI。\n- 实际发现/反证：**有效反证**。改变后的内部允许零路径对 CLI 不可达，符合实际调用者契约。若 `page_size` 被外部导出或有其他调用者，当前范围未声明此承诺；不将这种未证实用法臆断为公开 API。\n- 轴：需求/契约、CLI 正确性在上述输入已核验；规范无另外要求；外部内部函数调用者覆盖有限。\n\n### APP — Swift 模型与 iOS 生命周期\n\n审查请求：“审查 draft 后台/前台恢复这次变化，检查支持的移动端生命周期。”\n\n- S0：`c2fc581437e405e25d4ed8a1d80817ec9fc76a61` → `d9d3e0ac6bb509b06d4db02a6b10f0da9f8904ae`；变更 `SessionModel.swift:4`。`SPEC.txt` 要求 draft 在支持的 iOS 后台/前台转换后保留，并说明真实集成需持久化。\n- S1/S2：`apps.md`；P1 生命周期/恢复；若 UI 异步状态改变才触发 U2，本对象未改请求或视图结果，U2 不适用。F3 缺目标运行环境时分别记录模拟与真实证据。\n- 执行：`swiftc SessionModel.swift -o <run-v2外部路径>/model && ./model`，基线打印 `draft=unsaved`，目标打印 `draft=`，均编译/运行成功。`xcrun simctl list devices booted` 只返回设备平台标题，无已启动设备；没有 iOS 模拟器或真机观察。\n- 实际发现/反证：宿主执行确认这个 Swift 模型方法被调用时会清空 draft；但源快照没有 iOS AppDelegate/SceneDelegate/SwiftUI 生命周期接线，不能证明 OS 会调用该方法，也不能据此确认 iOS 用户实际丢失数据。最终**未验证**完整产品生命周期行为，保留明确潜在缺陷，不将模型模拟升级为已确认产品回归。\n- 轴：需求/契约已读但实现链未验证；正确性为模型局部观察、iOS 端到端未验证；规范（iOS SDK/设备）未验证。\n- 最小后续：需真实生命周期入口和模拟器/设备执行；当前仅 Swift 6.4 macOS host model。\n\n### DATA / AI — 阈值等号被移除\n\n审查请求：“审查评分 ETL 的 threshold 变化，按数据契约比较边界记录。”\n\n- S0：`2d9f66e2ce6480716adf4a51173f664a348e06ac` → `dde6888d0807342b01fae09ea22e0e3ac4b9ebf8`；变更 `pipeline.py:3`；`sample.csv` 与 `SPEC.txt` 固定在两端。契约要求 score `>= threshold` 全部纳入。\n- S1/S2：`data-ai.md`；E1 数据总体/过滤，B2 上下界，V1 数值比较。\n- 执行：固定 CSV 含 `0.8,0.81,0.79`，基线和目标用 `python3 -B pipeline.py sample.csv 0.8`。基线 `['a', 'b']`，目标 `['b']`。\n- 实际发现：**确认问题，P2，需求/正确性**。改为严格大于后丢失恰等阈值记录，与明示合同冲突。反证核实：阈值边界确实进入过滤器，且没有调用端归一化或排除恰等值的保护；样例和契约一同在固定源快照中。\n- 轴：需求/契约违反；正确性确认；规范无独立规范来源。\n- 限制：这个小 CSV 证明边界行为，不估算真实数据规模或指标业务影响。\n\n### EMBEDDED / REALTIME — uint32 elapsed 跨回绕\n\n审查请求：“审查嵌入式 timer elapsed 变化是否保持 uint32 tick 合约，并说明目标硬件限制。”\n\n- S0：`efb4339bbcc33f297f2f47db92b45baae46777aa` → `7a5b63576212a41b4642901105e5a792326b10ba`；变更 `timer.c:3`；SPEC 规定 host 模型按模 `2^32` 计算 elapsed ticks，且不要求本例推断真实目标时序。\n- S1/S2：`embedded.md`；变化是时间数值/边界，触发 B2；没有修改调度器、deadline 或 ISR，H2 的实时预算不适用；F3 限制真实板卡。\n- 执行：基线、目标均用 `clang -std=c11 -Wall -Wextra -Werror timer.c -o <run-v2外部路径>/timer && <timer>`。host 测例 start=`UINT32_MAX-2`、now=`3`，基线输出 `6`，目标输出 `0`。\n- 实际发现：**确认问题，P2，需求/正确性**。目标加入 `now >= then` 饱和判断，把合法 uint32 回绕时间差当成零；反例在隔离 host 上可执行、目标路径可达。没有靠“固件通常要饱和”推断需求，合同明确 elapsed 模语义。\n- 轴：需求/契约违反；正确性 host C 行为已核验；目标 MCU/RTOS/中断时序未验证，不能声称硬件 deadline 违反或设备复现。\n- 限制：host 编译验证的是此 C 代码和固定值，不证明寄存器、板卡、DMA、ISR 或最坏运行时间。\n\n### DOC / SPECIAL — 文档新增幂等承诺与实现冲突\n\n审查请求：“核实 retry 文档刚加入的 request_id 幂等承诺是否受实现支持。”\n\n- S0：`0b0ef77f5ad59d8e644d0d178f245dc621f3a8bf` → `110ff14e04ba04e6aebd4d13bf413e1f9f84edd3`；变更 `retry.md:3`。两端均包含未变更的 `charge.py` 与 SPEC（request_id 仅诊断用，不保证幂等）。\n- S1/S2：`noncode.md`；N1 文档声明对照实现；文档新增调用者可见承诺也触发 C5。A3 用于核实该新增“重试幂等”主张的实际重复副作用，但没有修改 retry runtime。\n- 执行：在基线与目标工作副本都运行 `python3 -B -c 'from charge import charge,ledger; charge(5,\"r-1\"); charge(5,\"r-1\"); print(ledger)'`，均观察 `[5, 5]`。实现将每次金额 append 到 ledger，不读取或去重 request_id。\n- 实际发现：**确认文档问题，P2，需求/正确性**。新文档承诺重复 request_id 不重复扣费，但实现和 SPEC 都相反；反证检查未发现幂等存储/操作身份路径。该差异仅为文档，未报告代码运行回归。\n- 轴：需求/契约违反（未经支持地扩大保证）；正确性（文档陈述错误）；规范无外加规范要求。\n- 限制：小型账本 stub 证明本仓这一实现行为；不代表任何外部生产系统。\n\n## 真实主仓库窄范围差异\n\n审查请求（自然路由演练）：“帮我看看这次未提交改动有没有回归”；主仓当前上下文已明确。冻结预期见 expectation 文件最后一行。本次实际收窄为 `skills/master/SKILL.md` 一条 unstaged 路径，**不是整个主仓库变更集，也不是外部 PR 基准**。\n\n- S0：repo `/Users/lzm0x219/Code/github.com/lzm0x219/coder-skills`；HEAD `4e325e23c6d21eaa39b4e1a0412b781b5d5ccfb0`；该路径 index blob `3ae292efe2177e4b1af3e79c551dbc02552b9af6` → worktree bytes SHA-256 `bb1271def86fe3a748324a4724d2729115bec54d1a4f958e1c5a0f795c79cb97`。未暂存 `skills/master/SKILL.md` 3 insertions / 1 deletion；该路径没有 staged diff。快照及文件 hash 在 `local-project/scope.txt`。\n- S1/S2：受影响对象是 master 入口的路由指令；按 `noncode.md` N1 检查实际分支、指令层级及明确的下一步。没有代码运行路径或系统集成改动；评价自然请求通过直接应用实际路由条文，而非只对比关键词。\n- 实际请求与路由观察：\n  1. “帮我看看这次未提交改动有没有回归” → 主 Skill `review-changes`；范围下一步为当前 repo 全部未提交差异（包括未跟踪新增），然后按 S0 分开固定 HEAD/index/worktree。\n  2. “用 coder:review-changes 审这个分支” → 用户明确点名，主 Skill `review-changes`；核实当前分支 HEAD 与仓库默认/目标基线，求唯一 merge-base 后审查；若基线无法唯一确定再问。\n  3. “审查一下代码”（没有范围和材料）→ 目标是差异审查，主 Skill `review-changes`，但不能开始宣称覆盖。最小下一步询问/取得 PR、commit/branch/ref、未提交工作区或补丁之一；材料到手再 S0。\n  4. “这个接口参数该怎样重新设计” → 主 Skill `design-apis`，目标是契约本身；“修掉这个已经复现的 bug” → 主 Skill `fix-bugs`，目标是实现修复。两者为负例，不应硬路由 review-changes。\n- 实际发现/反证：本窄 diff 添加“代码差异回归审查优先 review-changes，即使含 API 契约文件”与“契约本身设计走 design-apis；已有/随附契约的实现一致性仍以 review-changes 为主”；与当前入口的缺信息继续提问、明确 Skill 按用户点名规则相容。上述五种路由均能从明文分支得到主 Skill 和最小下一动作。此窄审查**未发现确认问题**。\n- 轴：需求/路由意图已核验；正确性限于文档分支逻辑，未做自动化 master harness；规范按 N1 核对指令层级与可检查下一步，无发现。\n- 限制：只审这一条文件，不覆盖同 checkout 其他文件；自然语言有歧义时仍须按材料/用户目的澄清。主仓库没有被写入、staging 或修复。\n\n## 评测过程中的失误与处理\n\n初版 v1 夹具把 `contract.md` 复制为 `CONTRACT.md`，然后删除小写文件。在 macOS 大小写不敏感文件系统上二者指向同一文件，导致规格没有进入 Git 快照。未对该版本形成任何审查结论；v1 全部保留但排除。冻结预期之后发现此缺陷，另建全新 v2 仓库，在 baseline 中使用不冲突的 `SPEC.txt`；所有正式行为观察都来自 v2 baseline/target。\n\n首次并行命令的多个 `exec_command` 意外共用 web 工作目录，除第一条外，其余命令在错误工作目录报“找不到文件”。这些错误输出不是场景结果；之后按每个绝对隔离路径重新执行，采用上列逐仓命令/结果。没有因此改动主仓或 v2 仓库。\n\n## 总体方法验收\n\n- **通过（方法路径）**：七种类型都按实际变化路由到对应 profile，并应用触发的细则；Git 两端点、路径、tree、内容 hash 已固定；五类主结果实际分布为 3 确认问题（DATA、EMBED、DOC）、2 有效反证（WEB、CLI）、2 证据不足/未验证（SERVICE、APP），另 SERVICE 的“格式错误”疑点被 `plutil` 反证。此统计是观察所得，不是强制凑出的分数。\n- **部分通过（证据广度）**：Web、CLI、数据、C host 及文档消费者有真实本地执行；Service 未启动 launchd；App 没有 booted iOS simulator/device；Embedded 没有目标 MCU/RTOS/hardware。相应限制均未升格为通过。\n- **部分通过（盲测独立性）**：基于冻结预期，但同一代理编写并审查，不能排除 fixture 设计偏差。\n- **未评估**：没有覆盖所有框架/语言/部署平台/认证，也不是外部真实 PR 准确率基准。本次不据此声称 Skill “满分”或在所有类型无漏报。\n\n无用户文件误改：临时仓库、源快照、运行副本和报告均在 `/tmp/review-changes-eval/all-types/`；主仓只读。交付前复核见源指纹清单和 `local-project/scope.txt`，旧评估材料未覆盖。\n",
+    "sha256": "c0458ad21d802d1f1d0bae021ae85efa215b9dcf4bb5eac016c2a2b8b5ea67f2"
+  },
+  "expected-before-review.md": {
+    "text": "# Frozen hypotheses before reviews (2026-10-01)\n\nThis is a hypothesis ledger written before executing any scenario consumer or reviewing the target diffs. The same evaluator constructs and reviews these cases, so this is not blinded and is not an external benchmark. Do not change fixture code to match this ledger.\n\n| ID/type | Pre-review hypothesis | Intended validation boundary |\n|---|---|---|\n| WEB | Defect likely: a public `limit=0` request may be replaced by a default through truthiness. | Execute WSGI app and compare base/target response under contract stating zero is valid. |\n| SVC/IaC | Evidence insufficient likely: plist syntax can be checked, but service manager lifecycle cannot be established on this host. | Run `plutil -lint`; do not load/install a service. |\n| LIB/CLI | Valid counterevidence likely: changed helper may be unreachable for invalid user input because CLI parser rejects it. | Execute actual CLI process in base/target with invalid input and confirm public behavior. |\n| APP/mobile-desktop | Evidence insufficient likely: host Swift model can run, but OS lifecycle/permission behavior is not thereby established. | Compile/run a deterministic Swift model only; no claim about simulator/device unless actually available and run. |\n| DATA/AI | Defect likely: changed threshold comparison may exclude an on-boundary valid sample. | Run the local CSV consumer on controlled rows with an explicit threshold contract. |\n| EMB/realtime | Valid counterevidence likely: unsigned elapsed-time subtraction may preserve correct wraparound semantics. | Compile/run C consumer with deterministic counter wrap; target hardware timing remains outside host proof. |\n| DOC/special | Defect likely: changed operational claim may overstate retry idempotency compared with implementation. | Compare changed doc to executable local implementation and run repeat-request behavior. |\n| LOCAL project | Hypothesis: a concrete review finding may exist in the current uncommitted `skills/master/SKILL.md` change; scope limited to that file and its changed router behavior, baseline is index and target is worktree. | Review after freezing this hypothesis; no edits to main checkout. |\n\nAcceptance profile for method, not code quality: each review must fix its baseline/target and paths, follow routing to the actually triggered profile and checks, distinguish verified/finding/unverified/not-applicable, provide consumer evidence and counterevidence, and state scope/axis limits. Expected mix is a planning hypothesis only; actual results can disagree.\n",
+    "sha256": "cee794a70c97cff09de04ba04c5fd81b1a9c6210b326cf42467df3ca216386e2"
+  },
+  "source-v2/SHA256SUMS.tsv": {
+    "text": "case\tversion\tpath\tbytes\tsha256\napp\tbaseline\tSPEC.txt\t104\te1e39ee70cfb542cf96eef4cb904316289123b70c01aa4f954c92a2523808faf\napp\tbaseline\tSessionModel.swift\t241\t41ed3f501f96975a48ac007dae2ecea203641d7f9276463ea9035a627d64ee88\napp\ttarget\tSPEC.txt\t104\te1e39ee70cfb542cf96eef4cb904316289123b70c01aa4f954c92a2523808faf\napp\ttarget\tSessionModel.swift\t253\t9f3a2d980fa2f5c5b7522369af7acb53c3f4db6be580162fd785b00c716decb8\ncli\tbaseline\tSPEC.txt\t85\t6e289451e0447a825e1640ba836ad1035a444a1880ae0263fc63245bedb50dac\ncli\tbaseline\tcli.py\t386\tc2b588b70f988a54d734f1284d2ae2037a53b7a7143e0a78563177872edd2c7c\ncli\ttarget\tSPEC.txt\t85\t6e289451e0447a825e1640ba836ad1035a444a1880ae0263fc63245bedb50dac\ncli\ttarget\tcli.py\t385\t81aee3b14799741f72ac3719ee5c250e760090619b86d0e9f98a931a4c744cc5\ndata\tbaseline\tSPEC.txt\t63\td53eeb2ade4044efde0f6e49fdc984f525b323d73386f5d845ccf02ec65856b1\ndata\tbaseline\tpipeline.py\t230\t0fa2ae1ee0445770df8d2cf4b581fe0a94e0ad966f8799085364d757ee25b752\ndata\tbaseline\tsample.csv\t29\t8f79fc076c82d9e62c892c1cb6ce18e3c7632fe6a59ca2ad7f5b7b4adbf64356\ndata\ttarget\tSPEC.txt\t63\td53eeb2ade4044efde0f6e49fdc984f525b323d73386f5d845ccf02ec65856b1\ndata\ttarget\tpipeline.py\t229\tf99287c819a398bac796d6ac5dca84f7af0c0c06974a79af5d3ea66a4aaecb89\ndata\ttarget\tsample.csv\t29\t8f79fc076c82d9e62c892c1cb6ce18e3c7632fe6a59ca2ad7f5b7b4adbf64356\ndocs\tbaseline\tSPEC.txt\t63\tc7c88f4bc3c65328c008faf19fe6e54809b704cae96c03358780f37519e8b7d9\ndocs\tbaseline\tcharge.py\t88\t91b860f2990f496acbe62493e52e3b0f8e001363520455cf7d6303721de53595\ndocs\tbaseline\tretry.md\t79\t8b53c4d5f606892ba78513a6082cb5057b96ecd478c9f6bcae17c523ac95cfa3\ndocs\ttarget\tSPEC.txt\t63\tc7c88f4bc3c65328c008faf19fe6e54809b704cae96c03358780f37519e8b7d9\ndocs\ttarget\tcharge.py\t88\t91b860f2990f496acbe62493e52e3b0f8e001363520455cf7d6303721de53595\ndocs\ttarget\tretry.md\t95\t03bae5ca6b7354461588f52ffada6510b00778ad84d6ff4e9e8e14b4eb8156c0\nembedded\tbaseline\tSPEC.txt\t85\t1dd31c1e80d5a28f83caa5546486f603c0b3172e043438fd99793513a8fb1cfc\nembedded\tbaseline\ttimer.c\t196\t0ac5d1f3ceef35cabfb12e306c0210ef8d584089f0aaf74ee616f4545d36e490\nembedded\ttarget\tSPEC.txt\t85\t1dd31c1e80d5a28f83caa5546486f603c0b3172e043438fd99793513a8fb1cfc\nembedded\ttarget\ttimer.c\t213\t04465c9c5491bfd6ad0efd87f5b32506e7726be3a5b73210a8416c5f35624071\nservice\tbaseline\tSPEC.txt\t66\t06e761107c509056b143957ca89058f7fa12a243cc0e5e33a3b36e547fa6dd43\nservice\tbaseline\tjob.plist\t241\t5414e4877f95a15bbe6ada82691eed39e18145f2f6365b98311937229441f65e\nservice\ttarget\tSPEC.txt\t66\t06e761107c509056b143957ca89058f7fa12a243cc0e5e33a3b36e547fa6dd43\nservice\ttarget\tjob.plist\t240\t2728ae81a62ed7bc0315f34c7feddac4fc5e6bb7a7ee52342689ae0124250e32\nweb\tbaseline\tSPEC.txt\t91\te1b6444f4c23905d98ec12fe822c899b5700d03bb5fbc17862cee04adbd2bde1\nweb\tbaseline\tapp.py\t381\t78700358915d5503f4407364502733015e0699a5816d153642af968cff63d75a\nweb\ttarget\tSPEC.txt\t91\te1b6444f4c23905d98ec12fe822c899b5700d03bb5fbc17862cee04adbd2bde1\nweb\ttarget\tapp.py\t364\t310669edb2131fde3376af53defc46a47a833ef76e115b569465e6c5c31a14eb\n",
+    "sha256": "ee45d8290207eaeb97558a837e6392e84952285e0beb4aff06f473c2842adb63"
+  },
+  "source-v2/VERSIONS.tsv": {
+    "text": "case\tbase_commit\ttarget_commit\tbase_tree\ttarget_tree\tchanged_paths\napp\tc2fc581437e405e25d4ed8a1d80817ec9fc76a61\td9d3e0ac6bb509b06d4db02a6b10f0da9f8904ae\t23287e5b2f9b26cc8d24d268267faa72234b4718\tf5ddcbea83cfa103915b0cb280bc848607c481d2\tSessionModel.swift\ncli\tf4bc0ab21c382836c9af25515063e8e619f1e108\tc47aa6dbba65ebca7b39835ac157554b4b8a3c07\tbbf61930549a6a68ac15d60efe7243c431dc967f\t0cc6bda8428a4b9d29e2ead939c0c344e5f6bb12\tcli.py\ndata\t2d9f66e2ce6480716adf4a51173f664a348e06ac\tdde6888d0807342b01fae09ea22e0e3ac4b9ebf8\t203c575d4b01bf861004eee19ee52cc541d17cd3\t7e03b2eef6c2870aade4567e594e6ea6f09dc5f8\tpipeline.py\ndocs\t0b0ef77f5ad59d8e644d0d178f245dc621f3a8bf\t110ff14e04ba04e6aebd4d13bf413e1f9f84edd3\t797b2e039723b67c2f61ad07c2d72e6a8a8caa24\t1e62e5acaa5c6b8a86926ab2aa0b5b58554ae758\tretry.md\nembedded\tefb4339bbcc33f297f2f47db92b45baae46777aa\t7a5b63576212a41b4642901105e5a792326b10ba\tcb21b1e7a9873cf9422368d75372a17831818932\td88d8a68b1f858ce3aa2b8b2855ae4dce5377e41\ttimer.c\nservice\t068067e021444b1d5934fb80f7e102ec4d2372a7\t7420fd853ad8cbaabc7d831c8b6638761ffa7cc3\td2660b89d1ec035614da5b5140f1ecaf18f580e3\td39ca2014e0d1fb0710a7b343258fa0929473712\tjob.plist\nweb\t8d9f2df0d993fd801d3b81c266f62f4c178aecaa\t488afa769253c677045420cb13960e338316f116\t313d0eb6d2fade72854f5d6088ff37b85e0bc1e4\t1a8db7be78eff205fab9ec24cd7fc3ccd512e90f\tapp.py\n",
+    "sha256": "83109d179756ee46235c578624798d2c2faf9a68177748803d75dd1a51fb3153"
+  },
+  "source-v2/app/baseline/SPEC.txt": {
+    "text": "SPEC: draft survives supported iOS background/foreground transitions; real integration must persist it.\n",
+    "sha256": "e1e39ee70cfb542cf96eef4cb904316289123b70c01aa4f954c92a2523808faf"
+  },
+  "source-v2/app/baseline/SessionModel.swift": {
+    "text": "import Foundation\nfinal class SessionModel {\n private(set) var draft=\"unsaved\"\n func sceneDidEnterBackground() {}\n func sceneWillEnterForeground() {}\n}\nlet model=SessionModel(); model.sceneDidEnterBackground(); print(\"draft=\\(model.draft)\")\n",
+    "sha256": "41ed3f501f96975a48ac007dae2ecea203641d7f9276463ea9035a627d64ee88"
+  },
+  "source-v2/app/target/SPEC.txt": {
+    "text": "SPEC: draft survives supported iOS background/foreground transitions; real integration must persist it.\n",
+    "sha256": "e1e39ee70cfb542cf96eef4cb904316289123b70c01aa4f954c92a2523808faf"
+  },
+  "source-v2/app/target/SessionModel.swift": {
+    "text": "import Foundation\nfinal class SessionModel {\n private(set) var draft=\"unsaved\"\n func sceneDidEnterBackground() { draft = \"\" }\n func sceneWillEnterForeground() {}\n}\nlet model=SessionModel(); model.sceneDidEnterBackground(); print(\"draft=\\(model.draft)\")\n",
+    "sha256": "9f3a2d980fa2f5c5b7522369af7acb53c3f4db6be580162fd785b00c716decb8"
+  },
+  "source-v2/app-diff.patch": {
+    "text": "diff --git a/SessionModel.swift b/SessionModel.swift\nindex c7a2a1d..ce52cf0 100644\n--- a/SessionModel.swift\n+++ b/SessionModel.swift\n@@ -1,7 +1,7 @@\n import Foundation\n final class SessionModel {\n  private(set) var draft=\"unsaved\"\n- func sceneDidEnterBackground() {}\n+ func sceneDidEnterBackground() { draft = \"\" }\n  func sceneWillEnterForeground() {}\n }\n let model=SessionModel(); model.sceneDidEnterBackground(); print(\"draft=\\(model.draft)\")\n",
+    "sha256": "188a20440262081dfe3fedc65f19a0ed57adfefae0e3c31c148596d01b0a2b8e"
+  },
+  "source-v2/cli/baseline/SPEC.txt": {
+    "text": "SPEC: CLI --size accepts positive integers only; zero is rejected with nonzero exit.\n",
+    "sha256": "6e289451e0447a825e1640ba836ad1035a444a1880ae0263fc63245bedb50dac"
+  },
+  "source-v2/cli/baseline/cli.py": {
+    "text": "import argparse\ndef positive(s):\n n=int(s)\n if n<=0: raise argparse.ArgumentTypeError(\"must be positive\")\n return n\ndef page_size(size):\n if size<=0: raise ValueError(\"size must be positive\")\n return size\ndef main(argv=None):\n p=argparse.ArgumentParser(); p.add_argument(\"--size\",type=positive,default=10); a=p.parse_args(argv); print(page_size(a.size))\nif __name__==\"__main__\": main()\n",
+    "sha256": "c2b588b70f988a54d734f1284d2ae2037a53b7a7143e0a78563177872edd2c7c"
+  },
+  "source-v2/cli/target/SPEC.txt": {
+    "text": "SPEC: CLI --size accepts positive integers only; zero is rejected with nonzero exit.\n",
+    "sha256": "6e289451e0447a825e1640ba836ad1035a444a1880ae0263fc63245bedb50dac"
+  },
+  "source-v2/cli/target/cli.py": {
+    "text": "import argparse\ndef positive(s):\n n=int(s)\n if n<=0: raise argparse.ArgumentTypeError(\"must be positive\")\n return n\ndef page_size(size):\n if size<0: raise ValueError(\"size must be positive\")\n return size\ndef main(argv=None):\n p=argparse.ArgumentParser(); p.add_argument(\"--size\",type=positive,default=10); a=p.parse_args(argv); print(page_size(a.size))\nif __name__==\"__main__\": main()\n",
+    "sha256": "81aee3b14799741f72ac3719ee5c250e760090619b86d0e9f98a931a4c744cc5"
+  },
+  "source-v2/cli-diff.patch": {
+    "text": "diff --git a/cli.py b/cli.py\nindex e97c274..18f3714 100644\n--- a/cli.py\n+++ b/cli.py\n@@ -4,7 +4,7 @@ def positive(s):\n  if n<=0: raise argparse.ArgumentTypeError(\"must be positive\")\n  return n\n def page_size(size):\n- if size<=0: raise ValueError(\"size must be positive\")\n+ if size<0: raise ValueError(\"size must be positive\")\n  return size\n def main(argv=None):\n  p=argparse.ArgumentParser(); p.add_argument(\"--size\",type=positive,default=10); a=p.parse_args(argv); print(page_size(a.size))\n",
+    "sha256": "25e207436a62eb5d8525cd9d03db8f2cc270a83fdce1fd126d35eb93108b3e15"
+  },
+  "source-v2/data/baseline/SPEC.txt": {
+    "text": "SPEC: include every record with score >= configured threshold.\n",
+    "sha256": "d53eeb2ade4044efde0f6e49fdc984f525b323d73386f5d845ccf02ec65856b1"
+  },
+  "source-v2/data/baseline/pipeline.py": {
+    "text": "import csv,sys\ndef selected(path,threshold):\n with open(path,newline=\"\") as f: return [r[\"id\"] for r in csv.DictReader(f) if float(r[\"score\"]) >= threshold]\nif __name__==\"__main__\": print(selected(sys.argv[1],float(sys.argv[2])))\n",
+    "sha256": "0fa2ae1ee0445770df8d2cf4b581fe0a94e0ad966f8799085364d757ee25b752"
+  },
+  "source-v2/data/baseline/sample.csv": {
+    "text": "id,score\na,0.8\nb,0.81\nc,0.79\n",
+    "sha256": "8f79fc076c82d9e62c892c1cb6ce18e3c7632fe6a59ca2ad7f5b7b4adbf64356"
+  },
+  "source-v2/data/target/SPEC.txt": {
+    "text": "SPEC: include every record with score >= configured threshold.\n",
+    "sha256": "d53eeb2ade4044efde0f6e49fdc984f525b323d73386f5d845ccf02ec65856b1"
+  },
+  "source-v2/data/target/pipeline.py": {
+    "text": "import csv,sys\ndef selected(path,threshold):\n with open(path,newline=\"\") as f: return [r[\"id\"] for r in csv.DictReader(f) if float(r[\"score\"]) > threshold]\nif __name__==\"__main__\": print(selected(sys.argv[1],float(sys.argv[2])))\n",
+    "sha256": "f99287c819a398bac796d6ac5dca84f7af0c0c06974a79af5d3ea66a4aaecb89"
+  },
+  "source-v2/data/target/sample.csv": {
+    "text": "id,score\na,0.8\nb,0.81\nc,0.79\n",
+    "sha256": "8f79fc076c82d9e62c892c1cb6ce18e3c7632fe6a59ca2ad7f5b7b4adbf64356"
+  },
+  "source-v2/data-diff.patch": {
+    "text": "diff --git a/pipeline.py b/pipeline.py\nindex c23bff0..e636d01 100644\n--- a/pipeline.py\n+++ b/pipeline.py\n@@ -1,4 +1,4 @@\n import csv,sys\n def selected(path,threshold):\n- with open(path,newline=\"\") as f: return [r[\"id\"] for r in csv.DictReader(f) if float(r[\"score\"]) >= threshold]\n+ with open(path,newline=\"\") as f: return [r[\"id\"] for r in csv.DictReader(f) if float(r[\"score\"]) > threshold]\n if __name__==\"__main__\": print(selected(sys.argv[1],float(sys.argv[2])))\n",
+    "sha256": "da11cff7556e465d2cdec1a56d55d835bdacca139b9c6ca69a214a0ea15cf5ea"
+  },
+  "source-v2/docs/baseline/SPEC.txt": {
+    "text": "SPEC: request_id is diagnostic only; no idempotency guarantee.\n",
+    "sha256": "c7c88f4bc3c65328c008faf19fe6e54809b704cae96c03358780f37519e8b7d9"
+  },
+  "source-v2/docs/baseline/charge.py": {
+    "text": "ledger=[]\ndef charge(amount, request_id=None):\n ledger.append(amount); return \"charged\"\n",
+    "sha256": "91b860f2990f496acbe62493e52e3b0f8e001363520455cf7d6303721de53595"
+  },
+  "source-v2/docs/baseline/retry.md": {
+    "text": "# Retry API\n\nOptional `request_id` is diagnostic only, not an idempotency key.\n",
+    "sha256": "8b53c4d5f606892ba78513a6082cb5057b96ecd478c9f6bcae17c523ac95cfa3"
+  },
+  "source-v2/docs/target/SPEC.txt": {
+    "text": "SPEC: request_id is diagnostic only; no idempotency guarantee.\n",
+    "sha256": "c7c88f4bc3c65328c008faf19fe6e54809b704cae96c03358780f37519e8b7d9"
+  },
+  "source-v2/docs/target/charge.py": {
+    "text": "ledger=[]\ndef charge(amount, request_id=None):\n ledger.append(amount); return \"charged\"\n",
+    "sha256": "91b860f2990f496acbe62493e52e3b0f8e001363520455cf7d6303721de53595"
+  },
+  "source-v2/docs/target/retry.md": {
+    "text": "# Retry API\n\nOptional `request_id` makes retries idempotent; repeating it never charges twice.\n",
+    "sha256": "03bae5ca6b7354461588f52ffada6510b00778ad84d6ff4e9e8e14b4eb8156c0"
+  },
+  "source-v2/docs-diff.patch": {
+    "text": "diff --git a/retry.md b/retry.md\nindex 4f73332..4becf17 100644\n--- a/retry.md\n+++ b/retry.md\n@@ -1,3 +1,3 @@\n # Retry API\n \n-Optional `request_id` is diagnostic only, not an idempotency key.\n+Optional `request_id` makes retries idempotent; repeating it never charges twice.\n",
+    "sha256": "9da9255fe05ce17735faf43081b836dffe510bc595fda7a74ea19ede7b948ce3"
+  },
+  "source-v2/embedded/baseline/SPEC.txt": {
+    "text": "SPEC: host model elapsed ticks use uint32 modulo-2^32 delta; no target timing claim.\n",
+    "sha256": "1dd31c1e80d5a28f83caa5546486f603c0b3172e043438fd99793513a8fb1cfc"
+  },
+  "source-v2/embedded/baseline/timer.c": {
+    "text": "#include <stdint.h>\n#include <stdio.h>\nstatic uint32_t elapsed(uint32_t now,uint32_t then){return now-then;}\nint main(void){uint32_t start=UINT32_MAX-2u,now=3u;printf(\"%u\\n\",elapsed(now,start));}\n",
+    "sha256": "0ac5d1f3ceef35cabfb12e306c0210ef8d584089f0aaf74ee616f4545d36e490"
+  },
+  "source-v2/embedded/target/SPEC.txt": {
+    "text": "SPEC: host model elapsed ticks use uint32 modulo-2^32 delta; no target timing claim.\n",
+    "sha256": "1dd31c1e80d5a28f83caa5546486f603c0b3172e043438fd99793513a8fb1cfc"
+  },
+  "source-v2/embedded/target/timer.c": {
+    "text": "#include <stdint.h>\n#include <stdio.h>\nstatic uint32_t elapsed(uint32_t now,uint32_t then){return now>=then ? now-then : 0u;}\nint main(void){uint32_t start=UINT32_MAX-2u,now=3u;printf(\"%u\\n\",elapsed(now,start));}\n",
+    "sha256": "04465c9c5491bfd6ad0efd87f5b32506e7726be3a5b73210a8416c5f35624071"
+  },
+  "source-v2/embedded-diff.patch": {
+    "text": "diff --git a/timer.c b/timer.c\nindex adb163a..146696f 100644\n--- a/timer.c\n+++ b/timer.c\n@@ -1,4 +1,4 @@\n #include <stdint.h>\n #include <stdio.h>\n-static uint32_t elapsed(uint32_t now,uint32_t then){return now-then;}\n+static uint32_t elapsed(uint32_t now,uint32_t then){return now>=then ? now-then : 0u;}\n int main(void){uint32_t start=UINT32_MAX-2u,now=3u;printf(\"%u\\n\",elapsed(now,start));}\n",
+    "sha256": "a69f727fc1ba1a04e7d887c6a752e089c5f9ac6ad1c10955643df6a816055191"
+  },
+  "source-v2/service/baseline/SPEC.txt": {
+    "text": "SPEC: No lifecycle policy is promised; consumer is macOS launchd.\n",
+    "sha256": "06e761107c509056b143957ca89058f7fa12a243cc0e5e33a3b36e547fa6dd43"
+  },
+  "source-v2/service/baseline/job.plist": {
+    "text": "<?xml version=\"1.0\"?><plist version=\"1.0\"><dict><key>Label</key><string>org.example.worker</string><key>ProgramArguments</key><array><string>/usr/bin/true</string></array><key>RunAtLoad</key><true/><key>KeepAlive</key><false/></dict></plist>",
+    "sha256": "5414e4877f95a15bbe6ada82691eed39e18145f2f6365b98311937229441f65e"
+  },
+  "source-v2/service/target/SPEC.txt": {
+    "text": "SPEC: No lifecycle policy is promised; consumer is macOS launchd.\n",
+    "sha256": "06e761107c509056b143957ca89058f7fa12a243cc0e5e33a3b36e547fa6dd43"
+  },
+  "source-v2/service/target/job.plist": {
+    "text": "<?xml version=\"1.0\"?><plist version=\"1.0\"><dict><key>Label</key><string>org.example.worker</string><key>ProgramArguments</key><array><string>/usr/bin/true</string></array><key>RunAtLoad</key><true/><key>KeepAlive</key><true/></dict></plist>",
+    "sha256": "2728ae81a62ed7bc0315f34c7feddac4fc5e6bb7a7ee52342689ae0124250e32"
+  },
+  "source-v2/service-diff.patch": {
+    "text": "diff --git a/job.plist b/job.plist\nindex 7e8099f..defcbc3 100644\n--- a/job.plist\n+++ b/job.plist\n@@ -1 +1 @@\n-<?xml version=\"1.0\"?><plist version=\"1.0\"><dict><key>Label</key><string>org.example.worker</string><key>ProgramArguments</key><array><string>/usr/bin/true</string></array><key>RunAtLoad</key><true/><key>KeepAlive</key><false/></dict></plist>\n\\ No newline at end of file\n+<?xml version=\"1.0\"?><plist version=\"1.0\"><dict><key>Label</key><string>org.example.worker</string><key>ProgramArguments</key><array><string>/usr/bin/true</string></array><key>RunAtLoad</key><true/><key>KeepAlive</key><true/></dict></plist>\n\\ No newline at end of file\n",
+    "sha256": "93acf0720298413456afe209fa6d93e6f6fdf3746fb9a7dca7bc2cf962dd07e8"
+  },
+  "source-v2/web/baseline/SPEC.txt": {
+    "text": "SPEC: GET items allows limit >= 0; explicit 0 returns empty. Omitted limit defaults to 20.\n",
+    "sha256": "e1b6444f4c23905d98ec12fe822c899b5700d03bb5fbc17862cee04adbd2bde1"
+  },
+  "source-v2/web/baseline/app.py": {
+    "text": "from urllib.parse import parse_qs\ndef list_items(query):\n p=parse_qs(query,keep_blank_values=True); raw=p.get(\"limit\",[None])[0]; limit=20 if raw is None else int(raw); return [f\"row-{i}\" for i in range(limit)]\ndef app(environ,start_response):\n body=repr(list_items(environ.get(\"QUERY_STRING\",\"\"))).encode(); start_response(\"200 OK\",[(\"Content-Type\",\"text/plain\")]); return [body]\n",
+    "sha256": "78700358915d5503f4407364502733015e0699a5816d153642af968cff63d75a"
+  },
+  "source-v2/web/target/SPEC.txt": {
+    "text": "SPEC: GET items allows limit >= 0; explicit 0 returns empty. Omitted limit defaults to 20.\n",
+    "sha256": "e1b6444f4c23905d98ec12fe822c899b5700d03bb5fbc17862cee04adbd2bde1"
+  },
+  "source-v2/web/target/app.py": {
+    "text": "from urllib.parse import parse_qs\ndef list_items(query):\n p=parse_qs(query,keep_blank_values=True); raw=p.get(\"limit\",[None])[0]; limit=int(raw or 20); return [f\"row-{i}\" for i in range(limit)]\ndef app(environ,start_response):\n body=repr(list_items(environ.get(\"QUERY_STRING\",\"\"))).encode(); start_response(\"200 OK\",[(\"Content-Type\",\"text/plain\")]); return [body]\n",
+    "sha256": "310669edb2131fde3376af53defc46a47a833ef76e115b569465e6c5c31a14eb"
+  },
+  "source-v2/web-diff.patch": {
+    "text": "diff --git a/app.py b/app.py\nindex 47ac664..d34af5b 100644\n--- a/app.py\n+++ b/app.py\n@@ -1,5 +1,5 @@\n from urllib.parse import parse_qs\n def list_items(query):\n- p=parse_qs(query,keep_blank_values=True); raw=p.get(\"limit\",[None])[0]; limit=20 if raw is None else int(raw); return [f\"row-{i}\" for i in range(limit)]\n+ p=parse_qs(query,keep_blank_values=True); raw=p.get(\"limit\",[None])[0]; limit=int(raw or 20); return [f\"row-{i}\" for i in range(limit)]\n def app(environ,start_response):\n  body=repr(list_items(environ.get(\"QUERY_STRING\",\"\"))).encode(); start_response(\"200 OK\",[(\"Content-Type\",\"text/plain\")]); return [body]\n",
+    "sha256": "2878d8e7801c351cd1f41b7069c86e1ffbfe50a00175dfbfa57af9dd626258bf"
+  },
+  "local-project/baseline-index.md": {
+    "text": "---\nname: master\ndescription: 当用户提出软件开发或软件工程任务时，识别目标，选择当前可用的 coder Skill 或常规执行路径，并推进任务。\n---\n\n# Coder 总入口\n\n识别用户要得到的结果、主要工程问题和相关项目约束。用户明确指定专业 Skill 时，遵从其选择。\n\n任务需要专门方法时，从当前环境中实际可用的 Skill 里选择一个主 Skill。只有任务的另一部分确实需要不同能力时，才使用第二个 Skill。项目规划文档中的候选 Skill 不等于已可用的 Skill。\n\n用户要设计、变更或评审调用者可见的 API 契约时，使用已实现的 `design-apis`；仅按既定契约编码或审查现有实现时，按对应任务处理。\n\n用户要修复已有行为的缺陷时，使用 `fix-bugs`；只要求分析原因而不修改，或请求新增行为时，按相应目标处理。\n\n通过选定的 Skill 继续完成任务。若用户只问推荐哪个 Skill，简要说明选择依据。若没有合适的专业 Skill，用智能体的常规能力处理，并在必要时说明能力缺口。仅在缺少关键信息且无法合理继续时提问。\n\n遵守用户指定的任务范围与授权。根据实际证据报告已完成的工作和验证结果。\n",
+    "sha256": "2f125f6693170caf43939a3317496c7380a5250b7f71f1735c932ba84a72bb85"
+  },
+  "local-project/scope.txt": {
+    "text": "repository=/Users/lzm0x219/Code/github.com/lzm0x219/coder-skills\ncomparison=index blob 3ae292efe2177e4b1af3e79c551dbc02552b9af6 -> worktree SHA-256 bb1271def86fe3a748324a4724d2729115bec54d1a4f958e1c5a0f795c79cb97\nHEAD=4e325e23c6d21eaa39b4e1a0412b781b5d5ccfb0\nchanged path=skills/master/SKILL.md (unstaged; no staged change)\nbase_bytes=1289 base_sha256=2f125f6693170caf43939a3317496c7380a5250b7f71f1735c932ba84a72bb85\ntarget_bytes=1727 target_sha256=bb1271def86fe3a748324a4724d2729115bec54d1a4f958e1c5a0f795c79cb97\n",
+    "sha256": "837453351364885a913ad660437267e51c7c8c81b651cd37b023971909c34466"
+  },
+  "local-project/target-worktree.md": {
+    "text": "---\nname: master\ndescription: 当用户提出软件开发或软件工程任务时，识别目标，选择当前可用的 coder Skill 或常规执行路径，并推进任务。\n---\n\n# Coder 总入口\n\n识别用户要得到的结果、主要工程问题和相关项目约束。用户明确指定专业 Skill 时，遵从其选择。\n\n任务需要专门方法时，从当前环境中实际可用的 Skill 里选择一个主 Skill。只有任务的另一部分确实需要不同能力时，才使用第二个 Skill。项目规划文档中的候选 Skill 不等于已可用的 Skill。\n\n用户的主要目标是审查 PR、提交、分支或未提交代码差异的正确性、回归与需求符合性时，使用已实现的 `review-changes`。差异包含 API 契约文件不自动改变主路由。只问全仓结构改善或要求直接修复时，按对应目标处理。\n\n用户的主要目标是设计、变更或评估调用者可见的 API 契约本身时，使用已实现的 `design-apis`，即使契约来自某个 PR。差异审查中的契约设计问题确需独立判断时，才以它作为第二项能力；审查实现是否遵守已有或随附契约仍以 `review-changes` 为主。\n\n用户要修复已有行为的缺陷时，使用 `fix-bugs`；只要求分析原因而不修改，或请求新增行为时，按相应目标处理。\n\n通过选定的 Skill 继续完成任务。若用户只问推荐哪个 Skill，简要说明选择依据。若没有合适的专业 Skill，用智能体的常规能力处理，并在必要时说明能力缺口。仅在缺少关键信息且无法合理继续时提问。\n\n遵守用户指定的任务范围与授权。根据实际证据报告已完成的工作和验证结果。\n",
+    "sha256": "bb1271def86fe3a748324a4724d2729115bec54d1a4f958e1c5a0f795c79cb97"
+  }
+}

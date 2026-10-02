@@ -1,0 +1,7 @@
+{
+  "omittedInputFields": { "id": "42", "input": {} },
+  "explicitNullOptionalFields": { "id": "42", "input": { "note": null, "displayLabel": null } },
+  "explicitValues": { "id": "42", "input": { "note": "packed", "priority": 4, "displayLabel": "gift" } },
+  "invalidNonNullWithDefault": { "id": "42", "input": { "priority": null } },
+  "missingRequiredOperationVariable": { "input": {} }
+}

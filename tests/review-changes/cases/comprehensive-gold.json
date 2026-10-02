@@ -1,0 +1,64 @@
+{
+  "frozen_at": "2026-10-01",
+  "note": "评测者只读 corpus，提交结果前不读此文件；预期由主代理先固定。受控样本不代表全域精度/召回。",
+  "cases": {
+    "case-01": {
+      "status": "defect",
+      "rules": [
+        "Q2",
+        "D2"
+      ],
+      "expected": "存储失败之前 ack，未持久化消息不再重投"
+    },
+    "case-02": {
+      "status": "defect",
+      "rules": [
+        "K1"
+      ],
+      "expected": "stdout 不能被 json.loads 解析"
+    },
+    "case-03": {
+      "status": "gap",
+      "rules": [
+        "W2",
+        "T1"
+      ],
+      "expected": "缺 middleware/session 证据，不能确认 handler 无鉴权"
+    },
+    "case-04": {
+      "status": "gap",
+      "rules": [
+        "H2"
+      ],
+      "expected": "变化增加调用，不能证明实际超过500us"
+    },
+    "case-05": {
+      "status": "defect",
+      "rules": [
+        "E3"
+      ],
+      "expected": "test 值进入拟合，结果99变66"
+    },
+    "case-06": {
+      "status": "defect",
+      "rules": [
+        "P1"
+      ],
+      "expected": "重建文本从已保存值变空，限字典模型"
+    },
+    "case-07": {
+      "status": "defect",
+      "rules": [
+        "N1"
+      ],
+      "expected": "文档无效参数"
+    },
+    "case-08": {
+      "status": "counterevidence",
+      "rules": [
+        "R1"
+      ],
+      "expected": "上限8且行为等价，不能据嵌套循环报告性能缺陷"
+    }
+  }
+}

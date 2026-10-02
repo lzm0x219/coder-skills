@@ -1,0 +1,25 @@
+{
+  "profile": "Standard Webhooks 1.0.0-inspired; own service contract, not claimed universal",
+  "eventId": "evt_01HZX0R8N6Q0M1T2Y3A4B5C6D7",
+  "timestamp": 1710000000,
+  "rawBody": "{\"type\":\"order.paid\",\"data\":{\"orderId\":\"42\"}}",
+  "secretBase64": "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=",
+  "previousSecretBase64": "ZmVkY2JhOTg3NjU0MzIxMGZlZGNiYTk4NzY1NDMyMTA=",
+  "headers": {
+    "webhook-id": "evt_01HZX0R8N6Q0M1T2Y3A4B5C6D7",
+    "webhook-timestamp": "1710000000",
+    "webhook-signature": "v1,lkUTYQqpf9Aw1NYYEso7eCnTtSR/G6Wm9vDV++EBHgE= v1,5PyxP6F2H81atWmD/KrwMoPLQgpWUjrYWyZQwL809YU="
+  },
+  "signatureInput": "evt_01HZX0R8N6Q0M1T2Y3A4B5C6D7.1710000000.{\"type\":\"order.paid\",\"data\":{\"orderId\":\"42\"}}",
+  "deliveryPolicy": {
+    "2xx": "confirmed",
+    "3xx": "failed; do not follow redirect",
+    "410": "disable endpoint",
+    "429": "retry using Retry-After when valid",
+    "5xx-timeout-connection-reset": "retry with exponential backoff and jitter",
+    "retryLimit": 8,
+    "retryWindowHours": 72,
+    "replayIdStable": true,
+    "attemptTimestampChanges": true
+  }
+}

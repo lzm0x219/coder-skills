@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.example.test/cloudevent/order-created-v1.json",
+  "type": "object",
+  "required": ["specversion", "id", "source", "type", "data"],
+  "properties": {
+    "specversion": { "const": "1.0" },
+    "id": { "type": "string", "minLength": 1 },
+    "source": { "type": "string", "minLength": 1, "format": "uri-reference" },
+    "type": { "const": "com.example.order.created.v1" },
+    "datacontenttype": { "type": "string", "minLength": 1 },
+    "dataschema": { "type": "string", "format": "uri" },
+    "time": { "type": "string", "format": "date-time" },
+    "data": { "$ref": "https://schemas.example.test/events/order-created-v1.json" }
+  },
+  "additionalProperties": true
+}

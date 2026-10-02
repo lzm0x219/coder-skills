@@ -1,0 +1,24 @@
+# GraphQL Schema 与输入建模
+
+适用：新增或修改公共 SDL、操作输入/输出、schema 演进。本页以 GraphQL September 2025 规范为语言依据；客户端命名风格属于项目一致性约定。
+
+**G11｜按调用方问题建模｜新增公共类型/字段时。** 先列出消费者必须完成的读取/写入任务，再定义可组合的业务对象和连接；避免直接公开内部数据库表、内部状态字段或跨领域拼接对象。字段名表达稳定的业务含义；同一概念跨类型保持一致，动作字段用动词/结果类型表达。新增一个字段前检查现有关系能否组合表达，新增聚合字段则说明数据来源和一致性窗口。证据：具名的消费者操作、SDL 与代表操作，不以 resolver 内部结构为依据。参考：GraphQL.org [命名、反数据库镜像](https://graphql.org/learn/naming-design/)（官方实践指南，不是核心规范）；Apollo [Demand Oriented Schema Design](https://www.apollographql.com/docs/graphos/schema-design/guides/demand-oriented-schema-design)。
+
+**G12｜空值保证｜设置输出非空时。** 只有当字段在其公开生命周期内由服务契约保证非空，且其所有合法执行失败都有可接受的 null 传播范围时才用 `!`。逐层检查 nullable object/list/item：一个 non-null item 解析失败可使列表或更上层整段为空。若依赖下游数据、权限或外部服务可能缺失，采用可空输出并用 `errors.path` 指示局部失败，或提供明确 Result 类型；不要用非空掩盖异常。对可空到非空或列表项空值变更作破坏性评估。证据：缺失对象、权限拒绝、单个 item 失败、整个列表失败的 `data`/`errors.path`。依据：GraphQL 规范 [Type System §3.4](https://spec.graphql.org/September2025/#sec-Types)、[Handling Execution Errors §6.4.4](https://spec.graphql.org/September2025/#sec-Handling-Execution-Errors)。
+
+**G13｜列表类型形状｜设计列表字段时。** 分别决定列表本身、每项以及空集合的语义：`[T]` 允许列表/项为 null；`[T!]` 禁止 null item 但列表可 null；`[T]!` 列表非 null 但 item 可 null；`[T!]!` 两者均非 null。类型选择须反映契约保证和故障传播，而非“通常不为空”的数据库假设。若列表可能增长或触发昂贵加载，改为有界分页连接，并在字段参数中声明缺省/最大值与 continuation 语义。证据：空列表、null 列表、null item、越界页大小、下游局部失败。依据：GraphQL 规范 [Wrapping Types](https://spec.graphql.org/September2025/#sec-Wrapping-Types)、GraphQL.org [Pagination](https://graphql.org/learn/pagination/)。
+
+**G14｜输入和标量 coercion｜新增或复用 scalar 时。** 先按[共享数据契约](../common/data.md)CD04–CD12 定义数学域/时间/URI/ID/bytes 等跨协议 wire contract，再校验 GraphQL 特有 coercion：内建 `Int` 有界，不得借作任意精度/64 位；内建 `ID` 输出序列化为字符串、输入接受字符串或整数但保持 opaque identifier 语义，不承诺数值排序。自定义 scalar 用 `@specifiedBy` 指向实际采用的格式规范/版本，并实现变量与字面量的相同输入规则。无效字面量校验或变量输入 coercion 作为执行前 request error 拒绝，不运行 resolver；输出 result coercion 失败则是 execution error，保留 `errors.path` 并按 G03 传播 null，不能声称它发生在 resolver 执行前。证据：输入拒绝与执行次数、合法输入输出 round-trip、结果序列化失败及不同语言客户端。依据：GraphQL 规范 [Built-in Scalars](https://spec.graphql.org/September2025/#sec-Scalars.Built-in-Scalars)、[Custom Scalars](https://spec.graphql.org/September2025/#sec-Scalars)、[Handling Execution Errors](https://spec.graphql.org/September2025/#sec-Handling-Execution-Errors)；具体 scalar format 不统一强制。
+
+**G15｜部分更新语义｜mutation 接受输入对象更新资源时。** 将共享数据规则 CD02 的三态具体映射为该 mutation 的状态转移：字段省略不改、显式 null 清空或拒绝、value 替换/合并，并对嵌套对象逐字段定义。若客户端必须清空，可使用 field mask、显式 clear 操作或可区分的输入联合，不能让 null 同时表示“未提供”和“删除”。指定 unknown input field 策略、默认值、必填边界和未来 optional extension 兼容方案。输入 coercion/validation 失败时不能运行 resolver。证据：省略、null、值、未知字段、嵌套局部更新及旧 consumer。依据：GraphQL 规范 [Input Objects](https://spec.graphql.org/September2025/#sec-Input-Objects)、[Input Coercion](https://spec.graphql.org/September2025/#sec-Input-Coercion)。
+
+**G16｜oneOf 输入｜采用 GraphQL `@oneOf` 且执行器实现该规范时。** oneOf 的所有字段须 nullable 且无默认值；调用时恰好一个字段给非 null 值。若执行器/代码生成链未验证支持，使用合法 input object 加显式鉴别字段，声明允许的字段组合、互斥校验阶段及拒绝结果，或拆成专用 mutation；GraphQL union 只能作输出类型，不能用 input union 替代 oneOf。不能只写 directive 并假定验证发生。证据：无字段、多字段、单个 null、一个有效字段的 coercion 与 schema introspection；替代方案的合法 SDL 和互斥拒绝合同。依据：GraphQL September 2025 [OneOf Input Objects](https://spec.graphql.org/September2025/#sec-OneOf-Input-Objects)、[Input and Output Types](https://spec.graphql.org/September2025/#sec-Input-and-Output-Types)。
+
+**G17｜mutation 返回值｜执行有副作用的 mutation 时。** 返回可选择的业务资源/操作结果，使客户端能一次读取后续决策所需状态；将预期业务拒绝与 GraphQL 执行故障区别建模：可恢复、可展示的规则失败可作为 union/结果类型数据，程序/依赖故障走 `errors` 并遵守 null propagation。每种错误数据含稳定 discriminator 与恢复动作。多个顶层 mutation 字段按规范串行执行，但串行不等同事务；若要求全原子，在服务边界声明和证据测试原子性。证据：成功、规则拒绝、执行失败、同一 operation 中多个写字段的提交边界。参考：GraphQL 规范 [Normal and Serial Execution](https://spec.graphql.org/September2025/#sec-Normal-and-Serial-Execution)、Apollo [Errors as Data](https://www.apollographql.com/docs/graphos/schema-design/guides/errors-as-data-explained)。
+
+## 演进与弃用
+
+**G18｜GraphQL 演进｜删除/收紧/替换已发布 schema 元素时。** 按[共享演进契约](../common/evolution.md)CE01–CE07 检查旧操作的 input/output 方向、穷举客户端、弃用窗口与迁移证据；GraphQL 特有地检查新增必填参数、input/enum 变更、output nullability 和 `@deprecated` 限制。必填参数/input field 须先变 optional 或有 default 才可 deprecated；reason 指向确切替代。证据：旧 operation 校验及旧 consumer 运行、弃用可见性、替代 operation、新旧 schema diff。依据：GraphQL 规范 [`@deprecated`](https://spec.graphql.org/September2025/#sec--deprecated)、[Validation](https://spec.graphql.org/September2025/#sec-Validation)。
+
+
+**G32｜命名约定｜创建/重命名 schema 元素时。** 把项目 schema 命名样式固定成可 lint 的单一配置：字段/参数/指令采用一致 casing，类型采用一致 casing，enum value 采用一致 casing；Boolean 字段用可读真假语义，Query 字段用返回数据的名词，Mutation 在全 schema 固定采用一种动作/资源顺序。Input 类型、mutation payload、connection/edge 是否采用命名后缀也作为一套约定定义。不要宣称 camelCase、verb-first 等是 GraphQL 核心规范；GraphQL 只约束 Name 词法与保留名。若遗留 schema 有例外，维持旧入口并记录新命名例外理由，不为风格统一单独破坏兼容。证据：命名配置、lint 正反例、领域同义词表和旧消费者操作。参考：GraphQL.org 官方实践 [Naming Conventions and Design Standards](https://graphql.org/learn/naming-design/)、规范 [Names](https://spec.graphql.org/September2025/#sec-Names)；两者前者是已验证的常见约定而非规范要求。
